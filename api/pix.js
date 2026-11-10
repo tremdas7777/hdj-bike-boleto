@@ -1,5 +1,5 @@
 import { db } from "./_lib.js";
-import { criarCobranca, consultar, aplicar, gravar, tokenMp } from "./_pix.js";
+import { criarCobranca, consultar, aplicar, gravar, pixAtivo } from "./_pix.js";
 
 const PEDIDO = /^[A-Za-z0-9._-]{4,32}$/;
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -19,15 +19,15 @@ export default async function handler(req, res) {
     if (!PEDIDO.test(pedido)) return res.status(400).json({ ok: false, erro: "pedido" });
     let linha = null;
     try {
-      [linha] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=pedido,mp_id,status,criado_em`);
+      [linha] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=pedido,gateway_id,status,criado_em`);
     } catch {
       return res.status(200).json({ ok: true, status: null });
     }
     if (!linha) return res.status(200).json({ ok: true, status: null });
-    if (linha.status === "pendente" && linha.mp_id) {
+    if (linha.status === "pendente" && linha.gateway_id) {
       const velho = Date.now() - new Date(linha.criado_em).getTime() > 36 * 3600_000;
       if (velho) return res.status(200).json({ ok: true, status: "cancelado" });
-      const pagamento = await consultar(linha.mp_id);
+      const pagamento = await consultar(linha.gateway_id);
       if (pagamento) {
         const status = await aplicar(pedido, pagamento).catch(() => linha.status);
         return res.status(200).json({ ok: true, status });
@@ -46,12 +46,14 @@ export default async function handler(req, res) {
   const valor = Math.round(Number(b.valor) * 100) / 100;
   if (!PEDIDO.test(pedido)) return res.status(400).json({ ok: false, erro: "pedido" });
   if (!(valor >= 1 && valor <= 100000)) return res.status(400).json({ ok: false, erro: "valor" });
-  if (!(await tokenMp().catch(() => null))) return res.status(503).json({ ok: false, erro: "pix_indisponivel" });
+  if (!(await pixAtivo().catch(() => false))) return res.status(503).json({ ok: false, erro: "pix_indisponivel" });
 
   // Reaproveita uma cobrança pendente e ainda válida para o mesmo pedido.
   try {
     const [existente] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=pedido,status,copiaecola,qr,expira_em,valor`);
-    if (existente && existente.status === "pendente" && existente.copiaecola && new Date(existente.expira_em || 0) > new Date()) {
+    const expira = existente?.expira_em ? new Date(existente.expira_em) : null;
+    const vale = expira ? expira > new Date() : true; // a IronPay usa 24h por padrão
+    if (existente && existente.status === "pendente" && existente.copiaecola && vale) {
       return res.status(200).json({ ok: true, status: existente.status, copiaECola: existente.copiaecola, qr: existente.qr, expiraEm: existente.expira_em });
     }
   } catch {
@@ -62,12 +64,13 @@ export default async function handler(req, res) {
     const cobranca = await criarCobranca({
       pedido, valor,
       nome: b.nome, cpf: b.cpf, email: b.email, telefone: b.telefone,
+      endereco: b.endereco, utm: b.utm,
       base: base(req),
     });
     await gravar(pedido, {
       lead_id: UUID.test(b.lead_id || "") ? b.lead_id : null,
       valor,
-      mp_id: cobranca.mpId,
+      gateway_id: cobranca.id,
       status: "pendente",
       copiaecola: cobranca.copiaECola,
       qr: cobranca.qr,

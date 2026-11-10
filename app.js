@@ -456,6 +456,7 @@ async function abrirPix() {
       body: JSON.stringify({
         pedido: lead.pedido, lead_id: lead.id, valor: entrada,
         nome: lead.nomeCompleto, cpf: lead.cpf, email: lead.email, telefone: lead.telefone,
+        endereco: lead.endereco || null,
         utm: lead.origem || {},
       }),
     });
@@ -472,9 +473,32 @@ function linkWhatsApp() {
   return `https://wa.me/${num.length <= 11 ? `55${num}` : num}?text=${encodeURIComponent(texto)}`;
 }
 
+function pixQr(pix) {
+  const img = String(pix.qr || "");
+  if (/^data:image\//i.test(img)) return `<img class="pix-qr" src="${img}" alt="QR Code do Pix da adesão" width="232" height="232">`;
+  if (/^https?:\/\//i.test(img)) return `<img class="pix-qr" src="${esc(img)}" alt="QR Code do Pix da adesão" width="232" height="232">`;
+  // Sem imagem do gateway: desenha o QR a partir do código copia e cola.
+  return `<div class="pix-qr" data-qr="${esc(pix.copiaECola)}" aria-label="QR Code do Pix da adesão"></div>`;
+}
+
+function desenharQr(raiz) {
+  if (!raiz || typeof QRCode === "undefined") return;
+  raiz.querySelectorAll("[data-qr]").forEach((el) => {
+    if (el.dataset.pronto) return;
+    el.dataset.pronto = "1";
+    try {
+      new QRCode(el, { text: el.dataset.qr, width: 232, height: 232, correctLevel: QRCode.CorrectLevel.M });
+    } catch {
+      el.textContent = "Use o código copia e cola abaixo.";
+    }
+  });
+}
+
 function pixCard(pix) {
-  const qr = pix.qr ? `<img class="pix-qr" src="${pix.qr.startsWith("data:") ? pix.qr : `data:image/png;base64,${pix.qr}`}" alt="QR Code do Pix da adesão" width="232" height="232">` : "";
-  const expira = pix.expiraEm ? `<tr><td>Vale até</td><td>${new Date(pix.expiraEm).toLocaleString("pt-BR")}</td></tr>` : "";
+  const qr = pixQr(pix);
+  const expira = pix.expiraEm
+    ? `<tr><td>Vale até</td><td>${new Date(pix.expiraEm).toLocaleString("pt-BR")}</td></tr>`
+    : `<tr><td>Validade</td><td>24 horas</td></tr>`;
   return `<div class="sum pix"><h4>Adesão no Pix</h4><table class="kv">
     <tr><td>Pedido</td><td>${esc(lead.pedido)}</td></tr>
     <tr><td>Adesão</td><td><b>${brl(entrada)}</b></td></tr>${expira}</table>
@@ -587,6 +611,7 @@ async function pagamento() {
   if (!pix) return finalizarSemPix();
   await bot("Gerando o Pix da adesão…");
   const el = await botCard(pixCard(pix));
+  desenharQr(el);
   await bot("Assim que o pagamento cair, eu confirmo o pedido aqui na hora. 🙂");
   acompanharPix(el);
 }

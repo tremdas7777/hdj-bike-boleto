@@ -1,4 +1,5 @@
-// Aviso do Mercado Pago quando o Pix muda de status.
+// Postback da IronPay: { transaction_hash, status, amount, payment_method, paid_at }
+// Também confere o status na API antes de fechar o pedido, para não confiar só no corpo do aviso.
 import { db } from "./_lib.js";
 import { consultar, aplicar } from "./_pix.js";
 
@@ -11,25 +12,25 @@ export default async function handler(req, res) {
   if (typeof b === "string") { try { b = JSON.parse(b); } catch { b = null; } }
   b = b && typeof b === "object" ? b : {};
 
-  const tipo = b.type || b.topic || q.type || q.topic || "";
-  const id = b?.data?.id || b["data.id"] || q["data.id"] || q.id || "";
-  if (tipo !== "payment" || !id) return res.status(200).json({ ok: true, ignorado: true });
+  const dados = b.data && typeof b.data === "object" ? b.data : b;
+  const id = String(
+    dados.transaction_hash || dados.hash || dados.transaction_id || dados.id ||
+    b.transaction_hash || q.transaction_hash || q.hash || ""
+  ).trim();
+  if (!id) return res.status(200).json({ ok: true, ignorado: true });
 
-  const pagamento = await consultar(String(id)).catch(() => null);
-  if (!pagamento) return res.status(200).json({ ok: true, ignorado: true });
-
-  const pedido = String(pagamento.external_reference || "").trim();
-  if (!pedido) return res.status(200).json({ ok: true, ignorado: true });
-
-  // Só age em cobranças que nasceram no site.
-  let existe = null;
+  let linha = null;
   try {
-    [existe] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=pedido`);
+    [linha] = await db(`hdj_pagamentos?gateway_id=eq.${encodeURIComponent(id)}&select=pedido,status`);
   } catch {
     return res.status(200).json({ ok: true, banco: false });
   }
-  if (!existe) return res.status(200).json({ ok: true, ignorado: true });
+  if (!linha) return res.status(200).json({ ok: true, ignorado: true });
+  const pedido = String(linha.pedido || "").trim();
+  if (!pedido) return res.status(200).json({ ok: true, ignorado: true });
 
-  const status = await aplicar(pedido, pagamento).catch(() => null);
+  // O status oficial vem da consulta; o corpo do postback serve de atalho.
+  const oficial = await consultar(id).catch(() => null);
+  const status = await aplicar(pedido, oficial || { id, status: dados.status || b.status || linha.status }).catch(() => null);
   return res.status(200).json({ ok: true, pedido, status });
 }

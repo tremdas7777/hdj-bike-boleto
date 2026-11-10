@@ -185,7 +185,10 @@ h1 .hl{color:var(--accent)}
 .chat-gal{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;max-width:380px}
 .chat-gal img{aspect-ratio:1;object-fit:cover}
 .sum.pix .pix-box{display:flex;flex-direction:column;gap:10px;margin-top:12px;align-items:flex-start}
-.pix-qr{width:232px;height:232px;image-rendering:pixelated;background:#fff;padding:8px;border:1px solid var(--line);align-self:center}
+.pix-qr{width:232px;height:232px;image-rendering:pixelated;background:#fff;padding:8px;border:1px solid var(--line);align-self:center;box-sizing:content-box}
+div.pix-qr{display:flex;align-items:center;justify-content:center}
+div.pix-qr canvas{width:216px !important;height:216px !important;display:block}
+div.pix-qr img{display:none}
 .pix-instr{margin:0;font-size:13.5px;line-height:1.5;color:var(--mute)}
 .sum.pix .btn{align-self:stretch;justify-content:center}
 .pix-cod{width:100%;margin-top:2px;font:400 12px/1.4 var(--mono)}

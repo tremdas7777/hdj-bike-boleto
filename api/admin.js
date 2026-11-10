@@ -64,16 +64,19 @@ export default async function handler(req, res) {
     }
 
     if (b.acao === "integ_status") {
-      const p = await lerPrivado(["utmify_token", "utmify_pixel", "utmify_pixel_tiktok", "telegram_token", "telegram_chat", "mp_token"]);
-      const pixAtivo = process.env.PIX_ATIVO === "1" || !!p.mp_token || !!process.env.MP_ACCESS_TOKEN;
+      const p = await lerPrivado(["utmify_token", "utmify_pixel", "utmify_pixel_tiktok", "telegram_token", "telegram_chat", "iron_token", "iron_oferta", "iron_produto"]);
+      const token = process.env.IRONPAY_TOKEN || p.iron_token;
+      const oferta = process.env.IRONPAY_OFFER || p.iron_oferta || "";
+      const produto = process.env.IRONPAY_PRODUCT || p.iron_produto || "";
+      const pixAtivo = process.env.PIX_ATIVO === "1" || !!(token && oferta);
       return res.json({
         utmify: { token: mascarar(p.utmify_token), pixel: p.utmify_pixel || "", pixelTiktok: p.utmify_pixel_tiktok || "", pixAtivo },
         telegram: { token: mascarar(p.telegram_token), chat: p.telegram_chat || "" },
-        pix: { token: mascarar(p.mp_token || process.env.MP_ACCESS_TOKEN), ativo: pixAtivo },
+        pix: { token: mascarar(token), oferta, produto, ativo: pixAtivo },
       });
     }
 
-    const CHAVES = { utmify_token: /^[A-Za-z0-9_\-]{10,200}$/, utmify_pixel: /^[A-Za-z0-9]{5,40}$/, utmify_pixel_tiktok: /^[A-Za-z0-9]{5,40}$/, telegram_token: /^[0-9]{5,15}:[A-Za-z0-9_\-]{20,60}$/, telegram_chat: /^-?[0-9]{3,20}$/, mp_token: /^[A-Za-z0-9_.\-]{20,200}$/ };
+    const CHAVES = { utmify_token: /^[A-Za-z0-9_\-]{10,200}$/, utmify_pixel: /^[A-Za-z0-9]{5,40}$/, utmify_pixel_tiktok: /^[A-Za-z0-9]{5,40}$/, telegram_token: /^[0-9]{5,15}:[A-Za-z0-9_\-]{20,60}$/, telegram_chat: /^-?[0-9]{3,20}$/, iron_token: /^[A-Za-z0-9_.\-]{10,200}$/, iron_oferta: /^[A-Za-z0-9_\-]{3,64}$/, iron_produto: /^[A-Za-z0-9_\-]{3,64}$/ };
 
     if (b.acao === "integ_salvar") {
       const salvos = [];
@@ -88,7 +91,7 @@ export default async function handler(req, res) {
     }
 
     if (b.acao === "integ_remover") {
-      const grupos = { utmify: ["utmify_token", "utmify_pixel", "utmify_pixel_tiktok"], telegram: ["telegram_token", "telegram_chat"], pix: ["mp_token"] };
+      const grupos = { utmify: ["utmify_token", "utmify_pixel", "utmify_pixel_tiktok"], telegram: ["telegram_token", "telegram_chat"], pix: ["iron_token", "iron_oferta", "iron_produto"] };
       for (const k of grupos[b.grupo] || []) await apagarPrivado(k);
       return res.json({ ok: true });
     }
@@ -100,16 +103,23 @@ export default async function handler(req, res) {
         return r.ok ? res.json({ ok: true }) : res.status(400).json({ erro: r.erro });
       }
       if (b.grupo === "pix") {
-        const p = await lerPrivado(["mp_token"]);
-        const token = process.env.MP_ACCESS_TOKEN || p.mp_token;
-        if (!token) return res.status(400).json({ erro: "Cole o access token do Mercado Pago." });
+        const p = await lerPrivado(["iron_token", "iron_oferta"]);
+        const token = process.env.IRONPAY_TOKEN || p.iron_token;
+        const oferta = process.env.IRONPAY_OFFER || p.iron_oferta;
+        if (!token) return res.status(400).json({ erro: "Cole o token de API da IronPay." });
         try {
-          const r = await fetch("https://api.mercadopago.com/users/me", { headers: { Authorization: `Bearer ${token}` } });
-          if (!r.ok) return res.status(400).json({ erro: `Mercado Pago recusou o token (${r.status}).` });
+          const r = await fetch(`https://api.ironpayapp.com.br/api/public/v1/balance?api_token=${encodeURIComponent(token)}`, { headers: { Accept: "application/json" } });
+          if (!r.ok) return res.status(400).json({ erro: `IronPay recusou o token (${r.status}).` });
           const j = await r.json().catch(() => ({}));
-          return res.json({ ok: true, conta: j.nickname || j.email || "conta conectada" });
+          const d = j.data || j;
+          const saldo = Number(d.available || 0) / 100;
+          const conta = Number.isFinite(saldo) && saldo > 0
+            ? `saldo ${saldo.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`
+            : "conta conectada";
+          if (!oferta) return res.json({ ok: true, conta, aviso: "Falta o hash da oferta para gerar o Pix." });
+          return res.json({ ok: true, conta });
         } catch {
-          return res.status(400).json({ erro: "Não consegui falar com o Mercado Pago." });
+          return res.status(400).json({ erro: "Não consegui falar com a IronPay." });
         }
       }
       if (b.grupo === "utmify") {

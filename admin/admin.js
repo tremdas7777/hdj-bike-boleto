@@ -480,9 +480,11 @@ async function renderAjustes() {
       </div>
       <div class="cfg-acoes"><button type="button" class="btn" id="u-salvar">Salvar</button><button type="button" class="btn ghost" id="u-teste">Enviar venda de teste</button><button type="button" class="btn ghost" id="u-remover">Remover</button></div></div>
     </section>
-    <section class="panel" id="int-pix" style="margin-top:14px"><div class="panel-h"><div><h3>Pagamento no Pix</h3><p>Gera o QR Code da adesão e confirma o pagamento sozinho, pelo Mercado Pago.</p></div><span id="p-pill"></span></div>
+    <section class="panel" id="int-pix" style="margin-top:14px"><div class="panel-h"><div><h3>Pagamento no Pix</h3><p>Gera o QR Code da adesão e confirma o pagamento sozinho, pela IronPay.</p></div><span id="p-pill"></span></div>
       <div class="panel-b"><div class="cfg">
-        <div class="form-row full"><label for="p-token">Access token do Mercado Pago</label><input id="p-token" autocomplete="off" placeholder="APP_USR-..."><small id="p-token-atual">Mercado Pago › Seu negócio › Configurações › Credenciais › Access token de produção.</small></div>
+        <div class="form-row full"><label for="p-token">Token de API da IronPay</label><input id="p-token" autocomplete="off" placeholder="Cole o token da conta"><small id="p-token-atual">IronPay › Configurações › API › Token de acesso.</small></div>
+        <div class="form-row"><label for="p-oferta">Hash da oferta</label><input id="p-oferta" autocomplete="off" placeholder="Ex.: 7becb"><small>A oferta da moto no painel da IronPay. Sem ela o Pix não é gerado.</small></div>
+        <div class="form-row"><label for="p-produto">Hash do produto</label><input id="p-produto" autocomplete="off" placeholder="Opcional"><small>Se ficar vazio, uso o mesmo hash da oferta.</small></div>
         <div class="cfg-prev full" id="p-aviso"></div>
       </div>
       <div class="cfg-acoes"><button type="button" class="btn" id="p-salvar">Salvar</button><button type="button" class="btn ghost" id="p-teste">Testar conexão</button><button type="button" class="btn ghost" id="p-remover">Remover</button></div></div>
@@ -545,11 +547,17 @@ async function ligarIntegracoes() {
     $("#u-aviso").textContent = s.utmify?.pixAtivo
       ? "Os pedidos que chegam ao Pix são enviados para a UTMify como “aguardando pagamento”."
       : "O pixel já roda no site. Os pedidos só são enviados para a UTMify quando o Pix real estiver ligado, para não contar venda que não existe.";
-    $("#p-pill").innerHTML = s.pix && s.pix.token ? pill("Conectado", "ok") : pill("Não configurado", "");
-    $("#p-token-atual").textContent = s.pix && s.pix.token ? `Token salvo: ${s.pix.token}. Cole outro para trocar.` : "Mercado Pago › Seu negócio › Configurações › Credenciais › Access token de produção.";
-    $("#p-aviso").textContent = s.pix && s.pix.token
-      ? "O cliente paga a adesão no Pix dentro do chat e o pedido é confirmado automaticamente. Cadastre o webhook no Mercado Pago apontando para /api/webhook."
-      : "Sem o token, o cliente fecha o pedido e recebe o Pix pelo WhatsApp da loja.";
+    const pixToken = !!(s.pix && s.pix.token);
+    const pixOferta = !!(s.pix && s.pix.oferta);
+    $("#p-pill").innerHTML = pixToken && pixOferta ? pill("Conectado", "ok") : pixToken ? pill("Falta a oferta", "warn") : pill("Não configurado", "");
+    $("#p-oferta").value = (s.pix && s.pix.oferta) || "";
+    $("#p-produto").value = (s.pix && s.pix.produto) || "";
+    $("#p-token-atual").textContent = pixToken ? `Token salvo: ${s.pix.token}. Cole outro para trocar.` : "IronPay › Configurações › API › Token de acesso.";
+    $("#p-aviso").textContent = !pixToken
+      ? "Sem token, o pedido é registrado e a equipe envia o Pix pelo WhatsApp."
+      : !pixOferta
+        ? "Falta o hash da oferta: sem ele a loja não consegue gerar o Pix."
+        : "Pix ligado: o cliente paga a adesão dentro do chat e o pedido fecha sozinho."
     $("#t-pill").innerHTML = s.telegram?.token && s.telegram?.chat ? pill("Conectado", "ok") : pill("Não configurado", "");
     $("#t-token-atual").textContent = s.telegram?.token ? `Token salvo: ${s.telegram.token}. Cole outro para trocar.` : "Crie o bot no @BotFather e copie o token.";
     $("#t-chat").value = s.telegram?.chat || "";
@@ -558,9 +566,12 @@ async function ligarIntegracoes() {
   acao("#u-salvar", async () => { await api("integ_salvar", { utmify_token: $("#u-token").value, utmify_pixel: $("#u-pixel").value, utmify_pixel_tiktok: $("#u-pixel-tt").value }); $("#u-token").value = ""; toast("UTMify salva"); pintar(); });
   acao("#u-teste", async () => { await api("integ_teste", { grupo: "utmify" }); toast("Venda de teste enviada para a UTMify"); });
   acao("#u-remover", async () => { await api("integ_remover", { grupo: "utmify" }); toast("UTMify removida"); pintar(); });
-  acao("#p-salvar", async () => { await api("integ_salvar", { mp_token: $("#p-token").value }); $("#p-token").value = ""; toast("Mercado Pago salvo"); pintar(); });
-  acao("#p-teste", async () => { const r = await api("integ_teste", { grupo: "pix" }); toast(`Conectado: ${r.conta || "ok"}`); });
-  acao("#p-remover", async () => { await api("integ_remover", { grupo: "pix" }); toast("Mercado Pago removido"); pintar(); });
+  acao("#p-salvar", async () => {
+    await api("integ_salvar", { iron_token: $("#p-token").value, iron_oferta: $("#p-oferta").value, iron_produto: $("#p-produto").value });
+    $("#p-token").value = ""; toast("IronPay salva"); pintar();
+  });
+  acao("#p-teste", async () => { const r = await api("integ_teste", { grupo: "pix" }); toast(r.aviso || `IronPay: ${r.conta || "ok"}`); });
+  acao("#p-remover", async () => { await api("integ_remover", { grupo: "pix" }); toast("IronPay removida"); pintar(); });
   acao("#t-salvar", async () => { await api("integ_salvar", { telegram_token: $("#t-token").value, telegram_chat: $("#t-chat").value }); $("#t-token").value = ""; toast("Telegram salvo"); pintar(); });
   acao("#t-teste", async () => { await api("integ_teste", { grupo: "telegram" }); toast("Mensagem de teste enviada"); });
   acao("#t-remover", async () => { await api("integ_remover", { grupo: "telegram" }); toast("Telegram removido"); pintar(); });
