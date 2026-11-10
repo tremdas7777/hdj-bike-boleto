@@ -1,0 +1,106 @@
+import { senhaOk, db, limparConfig, lerPrivado, gravarPrivado, apagarPrivado, mascarar, enviarUtmify, enviarTelegram } from "./_lib.js";
+
+const STATUS = new Set(["novo", "em_contato", "aprovado", "recusado", "vendido"]);
+const UUID = /^[0-9a-f-]{36}$/i;
+
+export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  if (req.method !== "POST") return res.status(405).json({ erro: "método" });
+  if (!senhaOk(req)) return res.status(401).json({ erro: "Senha incorreta." });
+
+  let b = req.body;
+  if (typeof b === "string") { try { b = JSON.parse(b); } catch { b = {}; } }
+  b = b || {};
+
+  try {
+    if (b.acao === "entrar") return res.json({ ok: true });
+
+    if (b.acao === "listar") {
+      const dias = Math.min(Math.max(parseInt(b.dias, 10) || 30, 1), 365);
+      const desde = new Date(Date.now() - dias * 864e5).toISOString();
+      const linhas = await db(
+        `hdj_leads?select=*&atualizado_em=gte.${encodeURIComponent(desde)}&order=atualizado_em.desc&limit=1000`,
+      );
+      return res.json({ clientes: linhas });
+    }
+
+    if (b.acao === "atualizar") {
+      if (!UUID.test(b.id || "")) return res.status(400).json({ erro: "id" });
+      const patch = {};
+      if (STATUS.has(b.status_admin)) patch.status_admin = b.status_admin;
+      if (typeof b.notas === "string") patch.notas = b.notas.slice(0, 4000);
+      if (!Object.keys(patch).length) return res.status(400).json({ erro: "nada para salvar" });
+      await db(`hdj_leads?id=eq.${b.id}`, { method: "PATCH", body: patch, prefer: "return=minimal" });
+      return res.json({ ok: true });
+    }
+
+    if (b.acao === "config_ler") {
+      const [linha] = await db("hdj_config?id=eq.1&select=dados,atualizado_em");
+      return res.json({ config: linha?.dados || {}, atualizado_em: linha?.atualizado_em });
+    }
+
+    if (b.acao === "config_salvar") {
+      const dados = limparConfig(b.config || {});
+      if (dados.entradas && dados.adesao) dados.entradas = dados.entradas.filter((v) => v >= dados.adesao);
+      await db("hdj_config?id=eq.1", { method: "PATCH", body: { dados, atualizado_em: new Date().toISOString() }, prefer: "return=minimal" });
+      return res.json({ ok: true, config: dados });
+    }
+
+    if (b.acao === "ao_vivo") {
+      const agora = Date.now();
+      const ini = new Date(); ini.setHours(0, 0, 0, 0);
+      const desde = new Date(Math.min(ini.getTime(), agora - 30 * 60000)).toISOString();
+      const sessoes = await db(`hdj_sessoes?criado_em=gte.${encodeURIComponent(desde)}&order=visto_em.desc&limit=2000&select=sessao,criado_em,visto_em,path,referrer,device,utm_source,utm_medium,utm_campaign,utm_content,src,chat,lead_id`);
+      return res.json({ sessoes, agora: new Date(agora).toISOString(), inicioDia: ini.toISOString() });
+    }
+
+    if (b.acao === "integ_status") {
+      const p = await lerPrivado(["utmify_token", "utmify_pixel", "utmify_pixel_tiktok", "telegram_token", "telegram_chat"]);
+      return res.json({
+        utmify: { token: mascarar(p.utmify_token), pixel: p.utmify_pixel || "", pixelTiktok: p.utmify_pixel_tiktok || "", pixAtivo: process.env.PIX_ATIVO === "1" },
+        telegram: { token: mascarar(p.telegram_token), chat: p.telegram_chat || "" },
+      });
+    }
+
+    const CHAVES = { utmify_token: /^[A-Za-z0-9_\-]{10,200}$/, utmify_pixel: /^[A-Za-z0-9]{5,40}$/, utmify_pixel_tiktok: /^[A-Za-z0-9]{5,40}$/, telegram_token: /^[0-9]{5,15}:[A-Za-z0-9_\-]{20,60}$/, telegram_chat: /^-?[0-9]{3,20}$/ };
+
+    if (b.acao === "integ_salvar") {
+      const salvos = [];
+      for (const [k, re] of Object.entries(CHAVES)) {
+        if (typeof b[k] !== "string" || !b[k].trim()) continue;
+        const v = b[k].trim();
+        if (!re.test(v)) return res.status(400).json({ erro: `Valor inválido em ${k.replace(/_/g, " ")}.` });
+        await gravarPrivado(k, v);
+        salvos.push(k);
+      }
+      return res.json({ ok: true, salvos });
+    }
+
+    if (b.acao === "integ_remover") {
+      const grupos = { utmify: ["utmify_token", "utmify_pixel", "utmify_pixel_tiktok"], telegram: ["telegram_token", "telegram_chat"] };
+      for (const k of grupos[b.grupo] || []) await apagarPrivado(k);
+      return res.json({ ok: true });
+    }
+
+    if (b.acao === "integ_teste") {
+      if (b.grupo === "telegram") {
+        const p = await lerPrivado(["telegram_token", "telegram_chat"]);
+        const r = await enviarTelegram(p.telegram_token, p.telegram_chat, "✅ Teste do painel: os avisos de novos clientes vão chegar aqui.");
+        return r.ok ? res.json({ ok: true }) : res.status(400).json({ erro: r.erro });
+      }
+      if (b.grupo === "utmify") {
+        const p = await lerPrivado(["utmify_token"]);
+        const r = await enviarUtmify(p.utmify_token, {
+          orderId: `teste-${Date.now()}`, status: "waiting_payment", createdAt: Date.now(), teste: true,
+          nome: "Teste do painel", email: "teste@exemplo.com", telefone: "11999999999", cpf: null,
+          produto: "Teste · Moto elétrica HDJ GT-V8", centavos: 100, utm: { utm_source: "teste_painel" },
+        });
+        return r.ok ? res.json({ ok: true }) : res.status(400).json({ erro: r.erro || `UTMify ${r.status}` });
+      }
+    }
+
+    return res.status(400).json({ erro: "ação desconhecida" });
+  } catch {
+    return res.status(502).json({ erro: "Não consegui falar com o banco. Tente de novo." });
+  }
+}

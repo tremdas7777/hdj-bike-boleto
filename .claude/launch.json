@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "hdj", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "5199", "-d", "/Users/ulissescardoso/hdj-bike-boleto"], "port": 5199 }
+  ]
+}

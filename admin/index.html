@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Painel Rastro</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' fill='%23121413'/%3E%3Cpath d='M10 8h6l-5 24H5zM21 8h6l-5 24h-6zM32 8h6l-5 24h-6z' fill='%23f5a300'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="admin.css">
+<script src="../config.js"></script>
+</head>
+<body class="adm">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 40 24"><path d="M6 0h7L7 24H0zM19 0h7l-6 24h-7zM32 0h8l-6 24h-7z"/></symbol>
+  <symbol id="i-inicio" viewBox="0 0 24 24"><path d="M3 3h8v10H3zM13 3h8v6h-8zM13 11h8v10h-8zM3 15h8v6H3z"/></symbol>
+  <symbol id="i-clientes" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 10a7 7 0 0 1 14 0zm15-10a3 3 0 1 0 0-6M18 21h4a5 5 0 0 0-4-4.9"/></symbol>
+  <symbol id="i-abandonos" viewBox="0 0 24 24"><path d="M12 8v5l3 2M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/></symbol>
+  <symbol id="i-aovivo" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+  <symbol id="i-ajustes" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+</svg>
+
+<section id="login" class="login" hidden>
+  <form id="login-form" class="login-card">
+    <div class="brand"><svg><use href="#mark"/></svg><b data-loja></b></div>
+    <h1>Painel</h1>
+    <p>Digite a senha do painel para ver os clientes.</p>
+    <label for="senha">Senha</label>
+    <input id="senha" type="password" autocomplete="current-password" required>
+    <button class="btn" id="login-btn">Entrar</button>
+    <p class="err" id="login-err" role="alert"></p>
+  </form>
+</section>
+
+<div id="app" class="shell" hidden>
+  <aside class="side">
+    <div class="brand"><svg><use href="#mark"/></svg><b data-loja></b></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot">
+      <a href="/" target="_blank" rel="noopener">Ver o site</a>
+      <button type="button" id="sair">Sair</button>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="bar">
+      <h1 id="titulo"></h1>
+      <div class="bar-r" id="bar-r"></div>
+    </header>
+    <div id="demo-aviso" class="demo" hidden>Modo demonstração: clientes de exemplo, nada é salvo.</div>
+    <div id="view"></div>
+  </main>
+  <nav class="tabs" id="tabs"></nav>
+</div>
+
+<div class="drawer" id="drawer" hidden>
+  <div class="drawer-bg" data-fechar></div>
+  <aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="dw-titulo">
+    <header class="drawer-head"><div><h2 id="dw-titulo"></h2><p id="dw-sub"></p></div><button type="button" class="x" data-fechar aria-label="Fechar">×</button></header>
+    <div class="drawer-body" id="dw-body"></div>
+  </aside>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="admin.js"></script>
+</body>
+</html>
