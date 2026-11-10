@@ -96,6 +96,57 @@ export default async function handler(req, res) {
       return res.json({ ok: true });
     }
 
+    if (b.acao === "ironpay_configurar") {
+      const p = await lerPrivado(["iron_token", "iron_oferta", "iron_produto"]);
+      const token = process.env.IRONPAY_TOKEN || p.iron_token;
+      if (!token) return res.status(400).json({ erro: "Cole primeiro o token de API da IronPay." });
+      if (p.iron_oferta && p.iron_produto) return res.json({ ok: true, oferta: p.iron_oferta, produto: p.iron_produto, existente: true });
+
+      const [cfg] = await db("hdj_config?id=eq.1&select=dados").catch(() => [null]);
+      const dados = cfg?.dados || {};
+      const nome = dados?.produto?.nome || "Moto elétrica HDJ";
+      const modelo = dados?.produto?.modelo || "GT-V8 1000W";
+      const total = Math.round(Number(dados.precoTotal || 7243) * 100);
+      const headers = { "Content-Type": "application/json", Accept: "application/json" };
+      const api = (path) => `https://api.ironpayapp.com.br/api/public/v1${path}?api_token=${encodeURIComponent(token)}`;
+      let produto = p.iron_produto;
+
+      if (!produto) {
+        const r = await fetch(api("/products"), { method: "POST", headers, body: JSON.stringify({
+          title: `${nome} · ${modelo}`.slice(0, 120),
+          cover: null,
+          sale_page: process.env.PUBLIC_URL || null,
+          payment_type: 1,
+          product_type: "digital",
+          delivery_type: 1,
+          id_category: 1,
+          amount: total,
+        }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) return res.status(400).json({ erro: `IronPay não criou o produto (${r.status}): ${String(j.message || j.error || "dados inválidos").slice(0, 180)}` });
+        const d = j.data || j;
+        produto = String(d.hash || d.product_hash || "");
+        if (!produto) return res.status(400).json({ erro: "A IronPay criou o produto, mas não devolveu o hash." });
+        await gravarPrivado("iron_produto", produto);
+      }
+
+      let oferta = p.iron_oferta;
+      if (!oferta) {
+        const r = await fetch(api(`/products/${encodeURIComponent(produto)}/offers`), { method: "POST", headers, body: JSON.stringify({
+          title: `${nome} · Entrada no Pix`.slice(0, 120),
+          cover: null,
+          amount: total,
+        }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) return res.status(400).json({ erro: `IronPay não criou a oferta (${r.status}): ${String(j.message || j.error || "dados inválidos").slice(0, 180)}` });
+        const d = j.data || j;
+        oferta = String(d.hash || d.offer_hash || "");
+        if (!oferta) return res.status(400).json({ erro: "A IronPay criou a oferta, mas não devolveu o hash." });
+        await gravarPrivado("iron_oferta", oferta);
+      }
+      return res.json({ ok: true, produto, oferta, criado: true });
+    }
+
     if (b.acao === "integ_teste") {
       if (b.grupo === "telegram") {
         const p = await lerPrivado(["telegram_token", "telegram_chat"]);

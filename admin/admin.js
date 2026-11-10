@@ -485,9 +485,9 @@ async function renderAjustes() {
         <div class="form-row full"><label for="p-token">Token de API da IronPay</label><input id="p-token" autocomplete="off" placeholder="Cole o token da conta"><small id="p-token-atual">IronPay › Configurações › API › Token de acesso.</small></div>
         <div class="form-row"><label for="p-oferta">Hash da oferta</label><input id="p-oferta" autocomplete="off" placeholder="Ex.: 7becb"><small>A oferta da moto no painel da IronPay. Sem ela o Pix não é gerado.</small></div>
         <div class="form-row"><label for="p-produto">Hash do produto</label><input id="p-produto" autocomplete="off" placeholder="Opcional"><small>Se ficar vazio, uso o mesmo hash da oferta.</small></div>
-        <div class="cfg-prev full" id="p-aviso"></div>
+        <div class="cfg-prev full" id="p-aviso">Não quer procurar hashes? Cole só o token e use “Configurar automaticamente”.</div>
       </div>
-      <div class="cfg-acoes"><button type="button" class="btn" id="p-salvar">Salvar</button><button type="button" class="btn ghost" id="p-teste">Testar conexão</button><button type="button" class="btn ghost" id="p-remover">Remover</button></div></div>
+      <div class="cfg-acoes"><button type="button" class="btn" id="p-auto">Configurar automaticamente</button><button type="button" class="btn" id="p-salvar">Salvar</button><button type="button" class="btn ghost" id="p-teste">Testar conexão</button><button type="button" class="btn ghost" id="p-remover">Remover</button></div></div>
     </section>
     <section class="panel" id="int-tg" style="margin-top:14px"><div class="panel-h"><div><h3>Avisos no Telegram</h3><p>Uma mensagem a cada cadastro novo e a cada cliente que chega ao Pix.</p></div><span id="t-pill"></span></div>
       <div class="panel-b"><div class="cfg">
@@ -566,6 +566,14 @@ async function ligarIntegracoes() {
   acao("#u-salvar", async () => { await api("integ_salvar", { utmify_token: $("#u-token").value, utmify_pixel: $("#u-pixel").value, utmify_pixel_tiktok: $("#u-pixel-tt").value }); $("#u-token").value = ""; toast("UTMify salva"); pintar(); });
   acao("#u-teste", async () => { await api("integ_teste", { grupo: "utmify" }); toast("Venda de teste enviada para a UTMify"); });
   acao("#u-remover", async () => { await api("integ_remover", { grupo: "utmify" }); toast("UTMify removida"); pintar(); });
+  acao("#p-auto", async () => {
+    const token = $("#p-token").value.trim();
+    if (token) await api("integ_salvar", { iron_token: token });
+    const r = await api("ironpay_configurar", {});
+    toast(r.criado ? "Produto e oferta criados na IronPay" : "IronPay já configurada");
+    $("#p-token").value = "";
+    pintar();
+  });
   acao("#p-salvar", async () => {
     await api("integ_salvar", { iron_token: $("#p-token").value, iron_oferta: $("#p-oferta").value, iron_produto: $("#p-produto").value });
     $("#p-token").value = ""; toast("IronPay salva"); pintar();
