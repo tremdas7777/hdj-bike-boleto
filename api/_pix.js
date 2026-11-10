@@ -7,15 +7,21 @@ const digits = (v) => String(v || "").replace(/\D/g, "");
 const uuid = /^[0-9a-f-]{36}$/i;
 const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || ""));
 
+// Recursos criados na conta IronPay usada pela loja. O painel/variáveis de ambiente
+// continuam tendo prioridade; estes valores evitam que um deploy sem configuração
+// volte a exibir “Falta o hash da oferta”.
+const PRODUTO_PADRAO = "3oolsookfk";
+const OFERTA_PADRAO = "yp7kympp3s";
+
 // Credenciais: variável de ambiente tem prioridade; o painel salva em hdj_private.
 // A IronPay exige uma oferta (offer_hash) e um produto (product_hash) criados no painel dela.
 export async function credenciais() {
   const p = await lerPrivado(["iron_token", "iron_oferta", "iron_produto"]).catch(() => ({}));
-  const oferta = process.env.IRONPAY_OFFER || p.iron_oferta || null;
+  const oferta = process.env.IRONPAY_OFFER || p.iron_oferta || OFERTA_PADRAO;
   return {
     token: process.env.IRONPAY_TOKEN || p.iron_token || null,
     oferta,
-    produto: process.env.IRONPAY_PRODUCT || p.iron_produto || oferta,
+    produto: process.env.IRONPAY_PRODUCT || p.iron_produto || PRODUTO_PADRAO,
   };
 }
 
