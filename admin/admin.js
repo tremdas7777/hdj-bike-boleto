@@ -1,5 +1,4 @@
 const PADRAO = window.CONFIG_PADRAO;
-const DEMO = new URLSearchParams(location.search).has("demo") && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 const CHAVE = "rastro_admin_pwd";
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -51,7 +50,6 @@ function toast(msg) {
 }
 
 async function api(acao, dados = {}, senha = lerSenha()) {
-  if (DEMO) return demoApi(acao, dados);
   const r = await fetch("/api/admin", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-admin-senha": senha },
@@ -98,7 +96,6 @@ function navHtml(classe) {
 async function iniciar() {
   $("#login").hidden = true;
   $("#app").hidden = false;
-  $("#demo-aviso").hidden = !DEMO;
   $("#nav").innerHTML = navHtml("nav");
   $("#tabs").innerHTML = navHtml("tabs");
   await carregar();
@@ -435,7 +432,7 @@ async function renderAjustes() {
   $("#view").innerHTML = `<section class="panel"><div class="panel-b">Carregando…</div></section>`;
   let salvo = {};
   try { salvo = (await api("config_ler")).config || {}; } catch (e) { if (e.message === "401") return; toast(e.message); }
-  const v = { ...PADRAO, ...salvo, produto: { ...PADRAO.produto, ...(salvo.produto || {}) } };
+  const v = { ...PADRAO, ...salvo, produto: { ...PADRAO.produto, ...(salvo.produto || {}) }, empresa: { ...PADRAO.empresa, ...(salvo.empresa || {}) } };
   const campo = (id, rot, valor, extra = "", ajuda = "") => `<div class="form-row ${extra.includes("full") ? "full" : ""}"><label for="${id}">${rot}</label><input id="${id}" value="${esc(valor ?? "")}" ${extra.replace("full", "")}>${ajuda ? `<small>${ajuda}</small>` : ""}</div>`;
   $("#view").innerHTML = `
     <section class="panel"><div class="panel-h"><div><h3>Condições da oferta</h3><p>O que aparece no site e no chat. Muda em até 1 minuto depois de salvar.</p></div></div>
@@ -459,8 +456,19 @@ async function renderAjustes() {
         ${campo("c-garantia", "Garantia", v.produto.garantia, "", "Ex.: 1 ano no motor e na bateria. Vazio = garantia legal de 90 dias.")}
         ${campo("c-carga", "Tempo de carregamento", v.produto.carregamento, "", "Ex.: 6 a 8 horas")}
         ${campo("c-cor", "Cor", v.produto.cor)}
+        ${campo("c-whats", "WhatsApp da loja", v.whatsapp, 'inputmode="tel"', "Com DDD. Ex.: 71999990000. Usado quando o cliente fecha o pedido.")}
       </div>
       <div class="cfg-acoes"><button type="button" class="btn" id="c-salvar">Salvar configurações</button><span class="sub" id="c-quando"></span></div></div>
+    </section>
+    <section class="panel" style="margin-top:14px"><div class="panel-h"><div><h3>Dados da empresa</h3><p>Aparecem no contrato e no rodapé do site.</p></div></div>
+      <div class="panel-b"><div class="cfg">
+        ${campo("e-razao", "Razão social", v.empresa.razaoSocial, 'class="full"')}
+        ${campo("e-cnpj", "CNPJ", v.empresa.cnpj, 'inputmode="numeric"', "Sem CNPJ o contrato sai com o campo em branco.")}
+        ${campo("e-tel", "Telefone", v.empresa.telefone, 'inputmode="tel"')}
+        ${campo("e-end", "Endereço", v.empresa.endereco, 'class="full"', "Rua, número, cidade e UF.")}
+        ${campo("e-email", "E-mail de atendimento", v.empresa.email, 'inputmode="email"')}
+      </div>
+      <div class="cfg-acoes"><button type="button" class="btn" id="e-salvar">Salvar empresa</button><span class="sub" id="e-quando"></span></div></div>
     </section>
     <h2 style="font-size:16px;margin:26px 0 12px">Integrações</h2>
     <section class="panel" id="int-utmify"><div class="panel-h"><div><h3>UTMify</h3><p>Rastreia as vendas por campanha e envia as conversões para o Meta e o TikTok.</p></div><span id="u-pill"></span></div>
@@ -471,6 +479,13 @@ async function renderAjustes() {
         <div class="cfg-prev full" id="u-aviso"></div>
       </div>
       <div class="cfg-acoes"><button type="button" class="btn" id="u-salvar">Salvar</button><button type="button" class="btn ghost" id="u-teste">Enviar venda de teste</button><button type="button" class="btn ghost" id="u-remover">Remover</button></div></div>
+    </section>
+    <section class="panel" id="int-pix" style="margin-top:14px"><div class="panel-h"><div><h3>Pagamento no Pix</h3><p>Gera o QR Code da adesão e confirma o pagamento sozinho, pelo Mercado Pago.</p></div><span id="p-pill"></span></div>
+      <div class="panel-b"><div class="cfg">
+        <div class="form-row full"><label for="p-token">Access token do Mercado Pago</label><input id="p-token" autocomplete="off" placeholder="APP_USR-..."><small id="p-token-atual">Mercado Pago › Seu negócio › Configurações › Credenciais › Access token de produção.</small></div>
+        <div class="cfg-prev full" id="p-aviso"></div>
+      </div>
+      <div class="cfg-acoes"><button type="button" class="btn" id="p-salvar">Salvar</button><button type="button" class="btn ghost" id="p-teste">Testar conexão</button><button type="button" class="btn ghost" id="p-remover">Remover</button></div></div>
     </section>
     <section class="panel" id="int-tg" style="margin-top:14px"><div class="panel-h"><div><h3>Avisos no Telegram</h3><p>Uma mensagem a cada cadastro novo e a cada cliente que chega ao Pix.</p></div><span id="t-pill"></span></div>
       <div class="panel-b"><div class="cfg">
@@ -493,7 +508,7 @@ async function renderAjustes() {
       precoTotal: num("#c-preco"), parcelas: num("#c-parcelas"), adesao: num("#c-min"), entradaMaxima: num("#c-max"),
       entradas: lista("#c-entradas"), vencimentos: lista("#c-venc"),
       frete: $("#c-frete").value, prazoEntrega: $("#c-prazo").value, juros: $("#c-juros").value,
-      loja: $("#c-loja").value, atendente: $("#c-atendente").value,
+      loja: $("#c-loja").value, atendente: $("#c-atendente").value, whatsapp: $("#c-whats").value,
       produto: { garantia: $("#c-garantia").value, carregamento: $("#c-carga").value, cor: $("#c-cor").value },
     };
     if (!config.precoTotal || !config.parcelas || config.adesao == null) return toast("Preencha valor total, boletos e entrada mínima.");
@@ -503,76 +518,54 @@ async function renderAjustes() {
     catch (err) { if (err.message !== "401") toast(err.message); }
     e.target.disabled = false;
   };
+  $("#e-salvar").onclick = async (e) => {
+    const empresa = {
+      razaoSocial: $("#e-razao").value, cnpj: $("#e-cnpj").value, telefone: $("#e-tel").value,
+      endereco: $("#e-end").value, email: $("#e-email").value,
+    };
+    e.target.disabled = true;
+    try {
+      const base = { ...salvo, precoTotal: num("#c-preco"), parcelas: num("#c-parcelas"), adesao: num("#c-min") };
+      await api("config_salvar", { config: { ...base, empresa } });
+      toast("Dados da empresa salvos");
+      $("#e-quando").textContent = "Salvo agora. O site atualiza em até 1 minuto.";
+    } catch (err) { if (err.message !== "401") toast(err.message); }
+    e.target.disabled = false;
+  };
 }
 
 async function ligarIntegracoes() {
   const pintar = async () => {
     let s;
     try { s = await api("integ_status"); } catch (e) { if (e.message !== "401") toast(e.message); return; }
-    $("#u-pill").innerHTML = s.utmify.token ? pill("Conectada", "ok") : pill("Não configurada", "");
-    $("#u-token-atual").textContent = s.utmify.token ? `Token salvo: ${s.utmify.token}. Cole outro para trocar.` : "UTMify › Integrações › Webhooks › Credenciais de API.";
-    $("#u-pixel").value = s.utmify.pixel;
-    $("#u-pixel-tt").value = s.utmify.pixelTiktok;
-    $("#u-aviso").textContent = s.utmify.pixAtivo
+    $("#u-pill").innerHTML = s.utmify?.token ? pill("Conectada", "ok") : pill("Não configurada", "");
+    $("#u-token-atual").textContent = s.utmify?.token ? `Token salvo: ${s.utmify.token}. Cole outro para trocar.` : "UTMify › Integrações › Webhooks › Credenciais de API.";
+    $("#u-pixel").value = s.utmify?.pixel || "";
+    $("#u-pixel-tt").value = s.utmify?.pixelTiktok || "";
+    $("#u-aviso").textContent = s.utmify?.pixAtivo
       ? "Os pedidos que chegam ao Pix são enviados para a UTMify como “aguardando pagamento”."
       : "O pixel já roda no site. Os pedidos só são enviados para a UTMify quando o Pix real estiver ligado, para não contar venda que não existe.";
-    $("#t-pill").innerHTML = s.telegram.token && s.telegram.chat ? pill("Conectado", "ok") : pill("Não configurado", "");
-    $("#t-token-atual").textContent = s.telegram.token ? `Token salvo: ${s.telegram.token}. Cole outro para trocar.` : "Crie o bot no @BotFather e copie o token.";
-    $("#t-chat").value = s.telegram.chat;
+    $("#p-pill").innerHTML = s.pix && s.pix.token ? pill("Conectado", "ok") : pill("Não configurado", "");
+    $("#p-token-atual").textContent = s.pix && s.pix.token ? `Token salvo: ${s.pix.token}. Cole outro para trocar.` : "Mercado Pago › Seu negócio › Configurações › Credenciais › Access token de produção.";
+    $("#p-aviso").textContent = s.pix && s.pix.token
+      ? "O cliente paga a adesão no Pix dentro do chat e o pedido é confirmado automaticamente. Cadastre o webhook no Mercado Pago apontando para /api/webhook."
+      : "Sem o token, o cliente fecha o pedido e recebe o Pix pelo WhatsApp da loja.";
+    $("#t-pill").innerHTML = s.telegram?.token && s.telegram?.chat ? pill("Conectado", "ok") : pill("Não configurado", "");
+    $("#t-token-atual").textContent = s.telegram?.token ? `Token salvo: ${s.telegram.token}. Cole outro para trocar.` : "Crie o bot no @BotFather e copie o token.";
+    $("#t-chat").value = s.telegram?.chat || "";
   };
   const acao = (btn, fn) => ($(btn).onclick = async (e) => { e.target.disabled = true; try { await fn(); } catch (err) { if (err.message !== "401") toast(err.message); } e.target.disabled = false; });
   acao("#u-salvar", async () => { await api("integ_salvar", { utmify_token: $("#u-token").value, utmify_pixel: $("#u-pixel").value, utmify_pixel_tiktok: $("#u-pixel-tt").value }); $("#u-token").value = ""; toast("UTMify salva"); pintar(); });
   acao("#u-teste", async () => { await api("integ_teste", { grupo: "utmify" }); toast("Venda de teste enviada para a UTMify"); });
   acao("#u-remover", async () => { await api("integ_remover", { grupo: "utmify" }); toast("UTMify removida"); pintar(); });
+  acao("#p-salvar", async () => { await api("integ_salvar", { mp_token: $("#p-token").value }); $("#p-token").value = ""; toast("Mercado Pago salvo"); pintar(); });
+  acao("#p-teste", async () => { const r = await api("integ_teste", { grupo: "pix" }); toast(`Conectado: ${r.conta || "ok"}`); });
+  acao("#p-remover", async () => { await api("integ_remover", { grupo: "pix" }); toast("Mercado Pago removido"); pintar(); });
   acao("#t-salvar", async () => { await api("integ_salvar", { telegram_token: $("#t-token").value, telegram_chat: $("#t-chat").value }); $("#t-token").value = ""; toast("Telegram salvo"); pintar(); });
   acao("#t-teste", async () => { await api("integ_teste", { grupo: "telegram" }); toast("Mensagem de teste enviada"); });
   acao("#t-remover", async () => { await api("integ_remover", { grupo: "telegram" }); toast("Telegram removido"); pintar(); });
   pintar();
 }
 
-// Modo demonstração (só em localhost com ?demo): clientes de exemplo, nada é enviado.
-function demoApi(acao, d) {
-  if (!demoApi.db) {
-    const nomes = ["Exemplo Silva", "Exemplo Souza", "Exemplo Lima", "Exemplo Costa", "Exemplo Rocha", "Exemplo Alves", "Exemplo Dias", "Exemplo Melo", "Exemplo Pires", "Exemplo Neves", "Exemplo Reis", "Exemplo Lopes"];
-    const cidades = [["Salvador", "BA"], ["Recife", "PE"], ["Goiânia", "GO"], ["Campinas", "SP"], ["Belém", "PA"], ["Curitiba", "PR"]];
-    const etapas = ["iniciado", "produto_apresentado", "condicoes_aceitas", "cadastro_confirmado", "proposta_aceita", "contrato_aceito", "endereco_confirmado", "aguardando_pagamento", "sem_interesse"];
-    const ents = [397, 700, 1000, 1500, 2000];
-    demoApi.db = Array.from({ length: 36 }, (_, i) => {
-      const e = etapas[(i * 7) % etapas.length];
-      const ent = ents[i % ents.length];
-      const t = Date.now() - (i * 5.3 + (i % 3)) * 3600e3;
-      const [cid, uf] = cidades[i % cidades.length];
-      const temCad = ord(e) >= ORDEM.cadastro_confirmado;
-      return {
-        id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`, criado_em: new Date(t - 9e5).toISOString(), atualizado_em: new Date(t).toISOString(),
-        etapa: e, primeiro_nome: nomes[i % nomes.length].split(" ")[0], nome: temCad ? nomes[i % nomes.length] : null,
-        cpf: temCad ? "000.000.000-00" : null, telefone: ord(e) >= ORDEM.condicoes_aceitas ? `(71) 90000-00${String(i).padStart(2, "0")}` : null,
-        email: temCad ? "exemplo@exemplo.com" : null, entrada: ord(e) >= ORDEM.produto_apresentado ? ent : null,
-        parcela: ord(e) >= ORDEM.produto_apresentado ? Math.round(((7243 - ent) / 18) * 100) / 100 : null,
-        dia_vencimento: ord(e) >= ORDEM.proposta_aceita ? 10 : null, cidade: ord(e) >= ORDEM.endereco_confirmado ? cid : null, uf: ord(e) >= ORDEM.endereco_confirmado ? uf : null,
-        pedido: ord(e) >= ORDEM.aguardando_pagamento ? `HDJ-${100200 + i}` : null, status_admin: ["novo", "em_contato", "novo", "aprovado"][i % 4], notas: "",
-        dados: { historico: [{ quem: "atendente", texto: "Olá! Tudo bem? 😊" }, { quem: "cliente", texto: nomes[i % nomes.length].split(" ")[0] }], eventos: [{ evento: "chat_aberto", em: new Date(t - 9e5).toISOString() }, { evento: e, em: new Date(t).toISOString() }] },
-      };
-    });
-    demoApi.cfg = {};
-  }
-  if (acao === "listar") return Promise.resolve({ clientes: demoApi.db });
-  if (acao === "atualizar") return Promise.resolve({ ok: true });
-  if (acao === "config_ler") return Promise.resolve({ config: demoApi.cfg });
-  if (acao === "config_salvar") { demoApi.cfg = d.config; return Promise.resolve({ ok: true }); }
-  if (acao === "integ_status") return Promise.resolve({ utmify: { token: "abcd…wxyz", pixel: "6ad8000000000000000ed52", pixelTiktok: "", pixAtivo: false }, telegram: { token: null, chat: "" } });
-  if (acao === "ao_vivo") {
-    const fontes = [["FB", "rastro-cbo-01", "criativo-3"], ["FB", "rastro-cbo-01", "criativo-1"], ["", "", ""], ["tiktok", "teste-tt", "video-2"]];
-    const agora = Date.now();
-    const ini = new Date(); ini.setHours(0, 0, 0, 0);
-    const sessoes = Array.from({ length: 48 }, (_, i) => {
-      const [s, c, ct] = fontes[i % fontes.length];
-      const visto = agora - (i < 5 ? i * 9000 : i * 150000);
-      return { sessao: String(i), criado_em: new Date(visto - 120000).toISOString(), visto_em: new Date(visto).toISOString(), device: i % 4 ? "mobile" : "desktop", utm_source: s || null, utm_campaign: c || null, utm_content: ct || null, referrer: s ? null : "https://www.google.com/", chat: i % 3 === 0, lead_id: i % 3 === 0 ? demoApi.db[i % demoApi.db.length].id : null };
-    });
-    return Promise.resolve({ sessoes, agora: new Date(agora).toISOString(), inicioDia: ini.toISOString() });
-  }
-  return Promise.resolve({ ok: true });
-}
+if (lerSenha()) iniciar(); else mostrarLogin();
 
-if (DEMO || lerSenha()) iniciar(); else mostrarLogin();

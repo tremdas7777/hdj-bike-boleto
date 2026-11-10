@@ -13,7 +13,7 @@ function definirEntrada(v) {
   saldo = C.precoTotal - v;
   parcela = calcParcela(v);
 }
-const CONTRATO_VERSAO = "v1-rascunho";
+const CONTRATO_VERSAO = "v1";
 
 const set = (attr, text) => document.querySelectorAll(`[${attr}]`).forEach((el) => (el.textContent = text));
 set("data-marca", C.loja);
@@ -29,8 +29,6 @@ set("data-saldo", brl(saldo));
 set("data-frete", C.frete || "A calcular");
 if (C.juros) set("data-juros-txt", `${C.juros}. Sujeito a análise de crédito.`);
 set("data-empresa", C.empresa.cnpj ? `${C.empresa.razaoSocial} · CNPJ ${C.empresa.cnpj}` : "");
-if (C.demo) document.body.classList.add("is-demo");
-
 const msgs = document.getElementById("msgs");
 const foot = document.getElementById("foot");
 window.__rapido = new URLSearchParams(location.search).has("rapido");
@@ -132,7 +130,11 @@ function card(html, silencioso) {
   if (!silencioso) log("atendente", { html });
   return el;
 }
-msgs.addEventListener("click", (e) => { if (e.target.closest("[data-open]")) abrirContrato(); });
+msgs.addEventListener("click", (e) => {
+  if (e.target.closest("[data-open]")) return abrirContrato();
+  const copiar = e.target.closest("[data-copiar]");
+  if (copiar) copiarCodigo(copiar.dataset.copiar, copiar);
+});
 
 async function typing(ms) {
   const t = document.createElement("div");
@@ -339,7 +341,6 @@ function contratoHtml() {
   const E = C.empresa;
   const vend = E.cnpj ? `${esc(E.razaoSocial)}, CNPJ ${esc(E.cnpj)}, ${esc(E.endereco)}` : `<mark>[DADOS DA EMPRESA VENDEDORA — PENDENTE: CNPJ ATIVO]</mark>`;
   return `<h3>Contrato de compra e venda a prazo</h3>
-  ${C.demo ? '<p class="demo-flag">RASCUNHO / DEMONSTRAÇÃO. Sem validade jurídica. Revisar com advogado antes de usar.</p>' : ""}
   <p><b>Vendedora:</b> ${vend}.</p>
   <p><b>Comprador(a):</b> ${esc(lead.nomeCompleto)}, CPF ${esc(lead.cpf)}, e-mail ${esc(lead.email)}, telefone ${esc(lead.telefone)}.</p>
   <p><b>1. Objeto.</b> ${esc(P.nome)}, modelo ${esc(P.modelo)}, cor ${esc(P.cor)}, nova, com nota fiscal.</p>
@@ -379,9 +380,9 @@ async function contrato() {
   }
   aceito = null;
   aceitar.onclick = null;
-  lead.aceiteContrato = { em: new Date().toISOString(), versao: CONTRATO_VERSAO, userAgent: navigator.userAgent, demo: C.demo };
+  lead.aceiteContrato = { em: new Date().toISOString(), versao: CONTRATO_VERSAO, userAgent: navigator.userAgent };
   etapa("contrato_aceito");
-  await bot(`Aceite registrado com sucesso, ${lead.primeiro}! ✅`, C.demo ? "(Modo demonstração: nenhuma cópia é enviada por e-mail.)" : `A cópia vai para ${lead.email}.`);
+  await bot(`Aceite registrado com sucesso, ${lead.primeiro}! ✅`, `Uma cópia do contrato fica salva no seu pedido e vai para ${lead.email}.`);
 }
 
 async function endereco() {
@@ -444,17 +445,150 @@ async function resumoFinal() {
   }
 }
 
+let pixTimer = null;
+const PIX_STATUS_FIM = ["cancelado", "expirado", "recusado", "rejeitado", "devolvido"];
+
+async function abrirPix() {
+  try {
+    const r = await fetch("/api/pix", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pedido: lead.pedido, lead_id: lead.id, valor: entrada,
+        nome: lead.nomeCompleto, cpf: lead.cpf, email: lead.email, telefone: lead.telefone,
+        utm: lead.origem || {},
+      }),
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j || !j.ok || !j.copiaECola) return null;
+    return j;
+  } catch { return null; }
+}
+
+function linkWhatsApp() {
+  const num = digits(String(C.whatsapp || ""));
+  if (num.length < 10) return null;
+  const texto = `Olá! Sou ${lead.nomeCompleto}. Acabei de fazer o pedido ${lead.pedido} no site: ${P.nome} ${P.modelo}, entrada de ${brl(entrada)} e ${C.parcelas}x de ${brl(parcela)} no boleto. Quero pagar a adesão de ${brl(entrada)} no Pix.`;
+  return `https://wa.me/${num.length <= 11 ? `55${num}` : num}?text=${encodeURIComponent(texto)}`;
+}
+
+function pixCard(pix) {
+  const qr = pix.qr ? `<img class="pix-qr" src="${pix.qr.startsWith("data:") ? pix.qr : `data:image/png;base64,${pix.qr}`}" alt="QR Code do Pix da adesão" width="232" height="232">` : "";
+  const expira = pix.expiraEm ? `<tr><td>Vale até</td><td>${new Date(pix.expiraEm).toLocaleString("pt-BR")}</td></tr>` : "";
+  return `<div class="sum pix"><h4>Adesão no Pix</h4><table class="kv">
+    <tr><td>Pedido</td><td>${esc(lead.pedido)}</td></tr>
+    <tr><td>Adesão</td><td><b>${brl(entrada)}</b></td></tr>${expira}</table>
+    <div class="pix-box">${qr}
+      <p class="pix-instr">Abra o app do seu banco e escolha <b>Pix › Ler QR Code</b>. Ou copie o código abaixo e cole em <b>Pix Copia e Cola</b>.</p>
+      <button type="button" class="btn sm" data-copiar="${esc(pix.copiaECola)}">Copiar código Pix</button>
+      <details class="pix-cod"><summary>Ver o código copia e cola</summary><code>${esc(pix.copiaECola)}</code></details>
+    </div>
+    <p class="pix-status" data-status>Aguardando o pagamento…</p></div>`;
+}
+
+async function copiarCodigo(codigo, botao) {
+  const rotulo = botao.textContent;
+  let copiou = false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(codigo);
+      copiou = true;
+    }
+  } catch {}
+  if (!copiou) {
+    try {
+      const t = document.createElement("textarea");
+      t.value = codigo; t.style.position = "fixed"; t.style.opacity = "0";
+      document.body.appendChild(t); t.select(); copiou = document.execCommand("copy"); t.remove();
+    } catch { copiou = false; }
+  }
+  if (copiou) botao.textContent = "Código copiado ✓";
+  else {
+    // Sem permissão de área de transferência: abre o código e deixa selecionado para copiar à mão.
+    const det = botao.closest(".pix-box")?.querySelector(".pix-cod");
+    if (det) {
+      det.open = true;
+      const c = det.querySelector("code");
+      if (c) {
+        const r = document.createRange();
+        r.selectNodeContents(c);
+        const sel = getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+    }
+    botao.textContent = "Código selecionado · copie com Ctrl+C";
+  }
+  setTimeout(() => (botao.textContent = rotulo), 4000);
+}
+
+async function pixConfirmado(cardEl) {
+  clearInterval(pixTimer);
+  const el = cardEl ? cardEl.querySelector("[data-status]") : document.querySelector("[data-status]");
+  if (el) el.innerHTML = "<b>Pagamento confirmado ✓</b>";
+  if (lead.etapa !== "pago") {
+    lead.pagoEm = new Date().toISOString();
+    etapa("pago");
+    track("pix_pago", { valor: entrada });
+  }
+  await bot(`Pagamento confirmado, ${lead.primeiro}! ✅`, `A adesão de ${brl(entrada)} caiu e o pedido ${lead.pedido} está confirmado.`);
+  await botCard(`<div class="sum"><h4>Pedido confirmado</h4><table class="kv">
+    <tr><td>Cliente</td><td>${esc(lead.nomeCompleto)}</td></tr>
+    <tr><td>Produto</td><td>${esc(P.nome)} · ${esc(P.modelo)} · ${esc(P.cor)}</td></tr>
+    <tr><td>Adesão paga</td><td>${brl(entrada)}</td></tr>
+    <tr><td>Boletos</td><td>${C.parcelas}x de ${brl(parcela)} · 1º em ${lead.primeiroVencimento}</td></tr>
+    <tr><td>Entrega</td><td>${esc(enderecoTxt())}</td></tr></table></div>`);
+  await bot(`Os ${C.parcelas} boletos de ${brl(parcela)} começam em ${lead.primeiroVencimento}. Envio cada um para ${lead.email} antes do vencimento.`, `Qualquer dúvida, é só chamar aqui. Obrigada pela compra, ${lead.primeiro}! 🏍️`);
+}
+
+function acompanharPix(cardEl) {
+  clearInterval(pixTimer);
+  const status = cardEl.querySelector("[data-status]");
+  let tentativas = 0;
+  pixTimer = setInterval(async () => {
+    if (++tentativas > 360) { clearInterval(pixTimer); return; }
+    let j = null;
+    try {
+      const r = await fetch(`/api/pix?pedido=${encodeURIComponent(lead.pedido)}`, { cache: "no-store" });
+      j = await r.json().catch(() => null);
+    } catch {}
+    if (!j || !j.status) return;
+    if (j.status === "pago") return pixConfirmado(cardEl);
+    if (PIX_STATUS_FIM.includes(j.status)) {
+      clearInterval(pixTimer);
+      if (status) status.textContent = "Esse código não vale mais.";
+      await bot("Esse código Pix expirou. Quer que eu gere outro?");
+      const r = await choose(["Gerar outro código Pix", "Falar com a equipe"]);
+      if (r.startsWith("Gerar")) return pagamento();
+      return finalizarSemPix("O código anterior expirou. ");
+    }
+  }, 5000);
+}
+
+async function finalizarSemPix(motivo = "") {
+  const zap = linkWhatsApp();
+  const canal = zap ? "no seu WhatsApp" : "pelo telefone que você cadastrou";
+  await botCard(`<div class="sum pix"><h4>Pedido ${esc(lead.pedido)} registrado</h4><table class="kv">
+    <tr><td>Adesão</td><td><b>${brl(entrada)}</b></td></tr>
+    <tr><td>Saldo</td><td>${C.parcelas}x de ${brl(parcela)} no boleto</td></tr>
+    <tr><td>Entrega</td><td>${esc(enderecoTxt())}</td></tr></table>
+    <p class="pix-instr">${esc(motivo)}Nossa equipe gera o Pix da adesão e envia ${canal} em instantes.</p>
+    ${zap ? `<a class="btn sm" href="${zap}" target="_blank" rel="noopener">Enviar meu pedido no WhatsApp</a>` : ""}
+    <p class="pix-status" data-status>Aguardando o pagamento da adesão</p></div>`);
+  await bot(`Pronto, ${lead.primeiro}! Seu pedido está registrado.`, zap
+    ? "Toque no botão acima para falar com a equipe no WhatsApp e receber o Pix da adesão. O pedido fica reservado no seu nome."
+    : "A equipe entra em contato pelo telefone que você cadastrou para enviar o Pix da adesão. O pedido fica reservado no seu nome.");
+}
+
 async function pagamento() {
   track("pix_iniciado", { valor: entrada });
   await bot(`Perfeito, ${lead.primeiro}!`, `A primeira parcela, de adesão, é de ${brl(entrada)}. Ela já faz parte do valor total da sua moto, como está no contrato.`);
-  if (C.demo) {
-    await botCard(`<div class="sum pix"><h4>Pagamento via Pix</h4><table class="kv">
-      <tr><td>Pedido</td><td>${esc(lead.pedido)}</td></tr><tr><td>Adesão</td><td>${brl(entrada)}</td></tr></table>
-      <div class="pix-off"><b>Modo demonstração</b><br>Nenhum Pix é gerado. Para gerar a cobrança, é preciso configurar o CNPJ ativo da empresa e o gateway de pagamento.</div></div>`);
-    await bot("Por enquanto, este é o fim da demonstração. Quando o gateway estiver ligado, aqui aparecem o QR Code e o código Copia e Cola, e o pagamento é confirmado sozinho. 🙂");
-    return;
-  }
-  // Produção: criar cobrança no gateway (server-side) e acompanhar pelo webhook.
+  const pix = await abrirPix();
+  if (!pix) return finalizarSemPix();
+  await bot("Gerando o Pix da adesão…");
+  const el = await botCard(pixCard(pix));
+  await bot("Assim que o pagamento cair, eu confirmo o pedido aqui na hora. 🙂");
+  acompanharPix(el);
 }
 
 async function inicio() {
@@ -503,7 +637,18 @@ const PASSOS = [
   ["contrato_aceito", endereco],
   ["endereco_confirmado", resumoFinal],
   ["aguardando_pagamento", pagamento],
+  ["pago", pedidoPago],
 ];
+
+async function pedidoPago() {
+  await bot(`Que bom te ver de novo, ${lead.primeiro}!`, `Seu pedido ${lead.pedido} já está com a adesão paga. ✅`);
+  await botCard(`<div class="sum"><h4>Pedido ${esc(lead.pedido)}</h4><table class="kv">
+    <tr><td>Produto</td><td>${esc(P.nome)} · ${esc(P.modelo)} · ${esc(P.cor)}</td></tr>
+    <tr><td>Adesão</td><td>Paga${lead.pagoEm ? ` em ${new Date(lead.pagoEm).toLocaleDateString("pt-BR")}` : ""}</td></tr>
+    <tr><td>Boletos</td><td>${C.parcelas}x de ${brl(parcela)} · 1º em ${lead.primeiroVencimento}</td></tr>
+    <tr><td>Entrega</td><td>${lead.endereco ? esc(enderecoTxt()) : "—"}</td></tr></table></div>`);
+  await bot(`Estamos preparando o envio. Se precisar de algo, é só falar aqui ou chamar no WhatsApp da loja.`);
+}
 
 async function seguirDe(et) {
   const i = Math.max(0, PASSOS.findIndex(([e]) => e === et));

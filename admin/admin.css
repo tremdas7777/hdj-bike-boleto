@@ -56,7 +56,6 @@ button,input,select,textarea{font:inherit;color:inherit}
 .bar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
 .bar h1{font-size:22px}
 .bar-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.demo{background:var(--warn-bg);color:var(--warn);border:1px solid #fedf89;border-radius:8px;padding:8px 12px;margin-bottom:16px;font-weight:500}
 .tabs{display:none}
 
 /* Blocos */

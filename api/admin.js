@@ -40,7 +40,16 @@ export default async function handler(req, res) {
     }
 
     if (b.acao === "config_salvar") {
-      const dados = limparConfig(b.config || {});
+      // Mescla com o que já está salvo: salvar a oferta não pode apagar os dados da empresa.
+      const [atual] = await db("hdj_config?id=eq.1&select=dados");
+      const base = atual?.dados || {};
+      const novo = b.config || {};
+      const dados = limparConfig({
+        ...base,
+        ...novo,
+        produto: { ...(base.produto || {}), ...(novo.produto || {}) },
+        empresa: { ...(base.empresa || {}), ...(novo.empresa || {}) },
+      });
       if (dados.entradas && dados.adesao) dados.entradas = dados.entradas.filter((v) => v >= dados.adesao);
       await db("hdj_config?id=eq.1", { method: "PATCH", body: { dados, atualizado_em: new Date().toISOString() }, prefer: "return=minimal" });
       return res.json({ ok: true, config: dados });
@@ -55,14 +64,16 @@ export default async function handler(req, res) {
     }
 
     if (b.acao === "integ_status") {
-      const p = await lerPrivado(["utmify_token", "utmify_pixel", "utmify_pixel_tiktok", "telegram_token", "telegram_chat"]);
+      const p = await lerPrivado(["utmify_token", "utmify_pixel", "utmify_pixel_tiktok", "telegram_token", "telegram_chat", "mp_token"]);
+      const pixAtivo = process.env.PIX_ATIVO === "1" || !!p.mp_token || !!process.env.MP_ACCESS_TOKEN;
       return res.json({
-        utmify: { token: mascarar(p.utmify_token), pixel: p.utmify_pixel || "", pixelTiktok: p.utmify_pixel_tiktok || "", pixAtivo: process.env.PIX_ATIVO === "1" },
+        utmify: { token: mascarar(p.utmify_token), pixel: p.utmify_pixel || "", pixelTiktok: p.utmify_pixel_tiktok || "", pixAtivo },
         telegram: { token: mascarar(p.telegram_token), chat: p.telegram_chat || "" },
+        pix: { token: mascarar(p.mp_token || process.env.MP_ACCESS_TOKEN), ativo: pixAtivo },
       });
     }
 
-    const CHAVES = { utmify_token: /^[A-Za-z0-9_\-]{10,200}$/, utmify_pixel: /^[A-Za-z0-9]{5,40}$/, utmify_pixel_tiktok: /^[A-Za-z0-9]{5,40}$/, telegram_token: /^[0-9]{5,15}:[A-Za-z0-9_\-]{20,60}$/, telegram_chat: /^-?[0-9]{3,20}$/ };
+    const CHAVES = { utmify_token: /^[A-Za-z0-9_\-]{10,200}$/, utmify_pixel: /^[A-Za-z0-9]{5,40}$/, utmify_pixel_tiktok: /^[A-Za-z0-9]{5,40}$/, telegram_token: /^[0-9]{5,15}:[A-Za-z0-9_\-]{20,60}$/, telegram_chat: /^-?[0-9]{3,20}$/, mp_token: /^[A-Za-z0-9_.\-]{20,200}$/ };
 
     if (b.acao === "integ_salvar") {
       const salvos = [];
@@ -77,7 +88,7 @@ export default async function handler(req, res) {
     }
 
     if (b.acao === "integ_remover") {
-      const grupos = { utmify: ["utmify_token", "utmify_pixel", "utmify_pixel_tiktok"], telegram: ["telegram_token", "telegram_chat"] };
+      const grupos = { utmify: ["utmify_token", "utmify_pixel", "utmify_pixel_tiktok"], telegram: ["telegram_token", "telegram_chat"], pix: ["mp_token"] };
       for (const k of grupos[b.grupo] || []) await apagarPrivado(k);
       return res.json({ ok: true });
     }
@@ -87,6 +98,19 @@ export default async function handler(req, res) {
         const p = await lerPrivado(["telegram_token", "telegram_chat"]);
         const r = await enviarTelegram(p.telegram_token, p.telegram_chat, "✅ Teste do painel: os avisos de novos clientes vão chegar aqui.");
         return r.ok ? res.json({ ok: true }) : res.status(400).json({ erro: r.erro });
+      }
+      if (b.grupo === "pix") {
+        const p = await lerPrivado(["mp_token"]);
+        const token = process.env.MP_ACCESS_TOKEN || p.mp_token;
+        if (!token) return res.status(400).json({ erro: "Cole o access token do Mercado Pago." });
+        try {
+          const r = await fetch("https://api.mercadopago.com/users/me", { headers: { Authorization: `Bearer ${token}` } });
+          if (!r.ok) return res.status(400).json({ erro: `Mercado Pago recusou o token (${r.status}).` });
+          const j = await r.json().catch(() => ({}));
+          return res.json({ ok: true, conta: j.nickname || j.email || "conta conectada" });
+        } catch {
+          return res.status(400).json({ erro: "Não consegui falar com o Mercado Pago." });
+        }
       }
       if (b.grupo === "utmify") {
         const p = await lerPrivado(["utmify_token"]);

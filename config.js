@@ -1,8 +1,9 @@
 // Valores padrão. O que for salvo em /admin › Configurações (tabela hdj_config) vem por /api/config.js e tem prioridade.
 window.CONFIG_PADRAO = {
-  demo: true, // true enquanto não houver CNPJ ativo + gateway + banco
   loja: "Rastro",
   atendente: "Maria Vitória",
+  // WhatsApp com DDD, só números (ex.: 5511999999999). Usado no fim do pedido quando o Pix automático não está ligado.
+  whatsapp: "",
   empresa: { razaoSocial: "", cnpj: "", endereco: "", email: "", telefone: "" },
   produto: {
     nome: "Moto elétrica HDJ",
@@ -31,5 +32,5 @@ window.CONFIG_PADRAO = {
 window.CONFIG = (() => {
   const P = window.CONFIG_PADRAO;
   const R = window.CONFIG_REMOTO || {};
-  return { ...P, ...R, produto: { ...P.produto, ...(R.produto || {}) }, empresa: P.empresa };
+  return { ...P, ...R, produto: { ...P.produto, ...(R.produto || {}) }, empresa: { ...P.empresa, ...(R.empresa || {}) } };
 })();

@@ -60,9 +60,19 @@ export function limparConfig(c) {
   const lista = (v, min, max) =>
     Array.isArray(v) ? [...new Set(v.map((x) => n(x, min, max)).filter((x) => x !== undefined))].sort((a, b) => a - b).slice(0, 8) : undefined;
   const p = c.produto && typeof c.produto === "object" ? c.produto : {};
+  const e = c.empresa && typeof c.empresa === "object" ? c.empresa : {};
+  const zap = (v) => {
+    const d = String(v || "").replace(/\D/g, "");
+    return d.length >= 10 && d.length <= 13 ? d : undefined;
+  };
+  const cnpj = (v) => {
+    const d = String(v || "").replace(/\D/g, "");
+    return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : undefined;
+  };
   const out = {
     loja: t(c.loja, 40),
     atendente: t(c.atendente, 40),
+    whatsapp: zap(c.whatsapp),
     precoTotal: n(c.precoTotal, 100, 100000),
     adesao: n(c.adesao, 0, 100000),
     entradas: lista(c.entradas, 0, 100000),
@@ -73,8 +83,11 @@ export function limparConfig(c) {
     prazoEntrega: t(c.prazoEntrega),
     juros: t(c.juros, 200),
     produto: { garantia: t(p.garantia), carregamento: t(p.carregamento), cor: t(p.cor, 40) },
+    empresa: { razaoSocial: t(e.razaoSocial, 120), cnpj: cnpj(e.cnpj), endereco: t(e.endereco, 200), email: t(e.email, 120), telefone: t(e.telefone, 20) },
   };
   for (const k of Object.keys(out.produto)) if (out.produto[k] === undefined) delete out.produto[k];
+  for (const k of Object.keys(out.empresa)) if (out.empresa[k] === undefined) delete out.empresa[k];
+  if (!Object.keys(out.empresa).length) delete out.empresa;
   for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
   if (out.parcelas) out.parcelas = Math.round(out.parcelas);
   return out;
