@@ -72,7 +72,7 @@ export default async function handler(req, res) {
       const produto = process.env.IRONPAY_PRODUCT || p.iron_produto || "";
       const pixAtivo = !!pixblackKey || process.env.PIX_ATIVO === "1" || !!(token && oferta);
       return res.json({
-        utmify: { token: mascarar(p.utmify_token), pixel: p.utmify_pixel || "", pixelTiktok: p.utmify_pixel_tiktok || "", pixAtivo },
+        utmify: { token: mascarar(process.env.UTMIFY_TOKEN || p.utmify_token), pixel: p.utmify_pixel || "", pixelTiktok: p.utmify_pixel_tiktok || "", pixAtivo },
         telegram: { token: mascarar(p.telegram_token), chat: p.telegram_chat || "" },
         pix: { gateway: pixblackKey ? "pixblack" : token && oferta ? "ironpay" : null, pixblackToken: mascarar(pixblackKey), pixblackSecret: mascarar(pixblackSecret), token: mascarar(token), oferta, produto, ativo: pixAtivo },
       });
@@ -179,12 +179,12 @@ export default async function handler(req, res) {
       }
       if (b.grupo === "utmify") {
         const p = await lerPrivado(["utmify_token"]);
-        const r = await enviarUtmify(p.utmify_token, {
+        const r = await enviarUtmify(process.env.UTMIFY_TOKEN || p.utmify_token, {
           orderId: `teste-${Date.now()}`, status: "waiting_payment", createdAt: Date.now(), teste: true,
           nome: "Teste do painel", email: "teste@exemplo.com", telefone: "11999999999", cpf: null,
           produto: "Teste · Moto elétrica HDJ GT-V8", centavos: 100, utm: { utm_source: "teste_painel" },
         });
-        return r.ok ? res.json({ ok: true }) : res.status(400).json({ erro: r.erro || `UTMify ${r.status}` });
+        return r.ok ? res.json({ ok: true }) : res.status(400).json({ erro: r.erro || `UTMify ${r.status || "recusou o pedido"}` });
       }
     }
 

@@ -1,6 +1,6 @@
 // Pix via Pix Black (prioritário) ou IronPay (compatibilidade legada): cria, consulta e confirma cobranças.
 // Pix Black: https://pixxblack.com/docs/api
-import { db, lerPrivado } from "./_lib.js";
+import { db, lerPrivado, enviarUtmify } from "./_lib.js";
 import crypto from "node:crypto";
 
 const PIXBLACK_BASE = "https://pixxblack.com/api/v1";
@@ -171,6 +171,17 @@ export async function aplicar(pedido, pagamento) {
   const [cobranca] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=lead_id,valor,avisado`).catch(() => [null]);
   if (!cobranca || cobranca.avisado) return status;
   if (uuid.test(cobranca.lead_id || "")) await db(`hdj_leads?id=eq.${cobranca.lead_id}`, { method: "PATCH", body: { etapa: "pago", atualizado_em: new Date().toISOString() }, prefer: "return=minimal" }).catch(() => {});
+  const cfg = await lerPrivado(["utmify_token"]).catch(() => ({}));
+  const token = process.env.UTMIFY_TOKEN || cfg.utmify_token;
+  if (token && uuid.test(cobranca.lead_id || "")) {
+    const [lead] = await db(`hdj_leads?id=eq.${encodeURIComponent(cobranca.lead_id)}&select=nome,email,telefone,cpf,utm_source,utm_medium,utm_campaign,utm_content`).catch(() => [null]);
+    await enviarUtmify(token, {
+      orderId: pedido, status: "paid", createdAt: Date.now(), approvedAt: Date.now(),
+      nome: lead?.nome || "Cliente", email: lead?.email, telefone: lead?.telefone, cpf: lead?.cpf,
+      centavos: Math.round(Number(cobranca.valor || 0) * 100), produto: "Adesão · Moto elétrica HDJ GT-V8",
+      utm: { utm_source: lead?.utm_source, utm_medium: lead?.utm_medium, utm_campaign: lead?.utm_campaign, utm_content: lead?.utm_content },
+    });
+  }
   await gravar(pedido, { avisado: true }).catch(() => {});
   return status;
 }

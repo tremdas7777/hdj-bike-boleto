@@ -713,7 +713,25 @@ async function seguirDe(et) {
   for (const [, fn] of PASSOS.slice(i)) if ((await fn()) === false) return;
 }
 
+async function pagamentoAindaConfirmado() {
+  if (!lead.pedido) return false;
+  try {
+    const r = await fetch(`/api/pix?pedido=${encodeURIComponent(lead.pedido)}`, { cache: "no-store" });
+    const j = await r.json().catch(() => null);
+    return j?.status === "pago";
+  } catch {
+    return false;
+  }
+}
+
 async function run() {
+  // O estado salvo no navegador nunca é prova de pagamento. Confirme no backend antes do pós-venda.
+  if (lead.etapa === "pago" && !(await pagamentoAindaConfirmado())) {
+    lead.etapa = "aguardando_pagamento";
+    delete lead.pagoEm;
+    lead.historico = [];
+    Store.save(lead);
+  }
   pintarPassos();
   if (retomavel(lead) && lead.historico.length) {
     for (const h of lead.historico) h.html ? card(h.html, true) : bubble(h.texto, h.quem === "cliente" ? "me" : "bot", true);

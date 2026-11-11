@@ -24,14 +24,16 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, status: null });
     }
     if (!linha) return res.status(200).json({ ok: true, status: null });
-    if (linha.status === "pendente" && linha.gateway_id) {
+    if (linha.gateway_id) {
       const velho = Date.now() - new Date(linha.criado_em).getTime() > 36 * 3600_000;
-      if (velho) return res.status(200).json({ ok: true, status: "cancelado" });
       const pagamento = await consultar(linha.gateway_id, linha.gateway || "ironpay");
       if (pagamento) {
-        const status = await aplicar(pedido, pagamento).catch(() => linha.status);
+        const status = await aplicar(pedido, pagamento).catch(() => String(pagamento.status || "").toLowerCase() === "paid" ? "pago" : "pendente");
         return res.status(200).json({ ok: true, status });
       }
+      if (linha.status === "pendente" && velho) return res.status(200).json({ ok: true, status: "cancelado" });
+      // Sem confirmação atual da API, nunca transforme um registro local em pagamento aprovado.
+      if (linha.status === "pago") return res.status(200).json({ ok: true, status: "pendente" });
     }
     return res.status(200).json({ ok: true, status: linha.status });
   }
@@ -78,13 +80,14 @@ export default async function handler(req, res) {
       ticket: cobranca.ticket,
       expira_em: cobranca.expiraEm,
       criado_em: new Date().toISOString(),
-    }).catch(() => {});
+    });
     return res.status(200).json({
       ok: true, status: "pendente", copiaECola: cobranca.copiaECola, qr: cobranca.qr, expiraEm: cobranca.expiraEm,
     });
   } catch (e) {
     const msg = String(e?.message || "erro");
     if (msg === "pix_indisponivel") return res.status(503).json({ ok: false, erro: "pix_indisponivel" });
+    if (msg.startsWith("banco ") || msg === "banco não configurado") return res.status(503).json({ ok: false, erro: "banco_indisponivel" });
     return res.status(502).json({ ok: false, erro: msg.slice(0, 160) });
   }
 }
