@@ -43,6 +43,13 @@ let lead = Store.all().find((l) => l.id === lerAtual()) || null;
 const retomavel = (l) => l && l.primeiro && !["sem_interesse", "iniciado"].includes(l.etapa);
 if (!retomavel(lead)) lead = novoLead();
 lead.eventos = lead.eventos || [];
+// Migração: versões antigas gravavam uma mensagem que bloqueava o mesmo CPF.
+// Ela não deve reaparecer quando o cliente retoma a conversa pelo navegador.
+if (Array.isArray(lead.historico)) {
+  const antes = lead.historico.length;
+  lead.historico = lead.historico.filter((h) => !String(h?.texto || "").includes("Já existe um pedido com esse CPF"));
+  if (lead.historico.length !== antes) Store.save(lead);
+}
 
 const UTM_CHAVES = ["src", "sck", "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
 function origemDaVisita() {
