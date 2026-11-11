@@ -47,8 +47,9 @@ export default async function handler(req, res) {
   const pedido = String(linha.pedido || "").trim();
   if (!pedido) return res.status(200).json({ ok: true, ignorado: true });
 
-  // O status oficial vem da consulta; o corpo do postback serve de atalho.
+  // O corpo do postback nunca é prova de pagamento: somente a consulta oficial autoriza a confirmação.
   const oficial = await consultar(id, linha.gateway || (eventoPixBlack ? "pixblack" : "ironpay")).catch(() => null);
-  const status = await aplicar(pedido, oficial || { id, gateway: linha.gateway, status: dados.status || b.status || linha.status }).catch(() => null);
+  if (!oficial) return res.status(200).json({ ok: true, ignorado: true, motivo: "consulta_oficial_indisponivel" });
+  const status = await aplicar(pedido, oficial).catch(() => null);
   return res.status(200).json({ ok: true, pedido, status });
 }

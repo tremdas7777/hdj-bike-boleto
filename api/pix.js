@@ -28,13 +28,14 @@ export default async function handler(req, res) {
       const velho = Date.now() - new Date(linha.criado_em).getTime() > 36 * 3600_000;
       const pagamento = await consultar(linha.gateway_id, linha.gateway || "ironpay");
       if (pagamento) {
-        const status = await aplicar(pedido, pagamento).catch(() => String(pagamento.status || "").toLowerCase() === "paid" ? "pago" : "pendente");
+        const status = await aplicar(pedido, pagamento).catch(() => "pendente");
         return res.status(200).json({ ok: true, status });
       }
       if (linha.status === "pendente" && velho) return res.status(200).json({ ok: true, status: "cancelado" });
       // Sem confirmação atual da API, nunca transforme um registro local em pagamento aprovado.
       if (linha.status === "pago") return res.status(200).json({ ok: true, status: "pendente" });
     }
+    if (linha.status === "pago") return res.status(200).json({ ok: true, status: "pendente" });
     return res.status(200).json({ ok: true, status: linha.status });
   }
 

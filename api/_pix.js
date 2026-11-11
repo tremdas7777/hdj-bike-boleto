@@ -155,6 +155,12 @@ export function traduzir(status) {
   }
 }
 
+function statusOficialmentePago(pagamento) {
+  const status = String(pagamento?.status || "").toLowerCase();
+  if (pagamento?.gateway === "pixblack") return status === "paid";
+  return status === "paid" || status === "approved" || status === "completed";
+}
+
 export async function gravar(pedido, dados) {
   await db("hdj_pagamentos?on_conflict=pedido", {
     method: "POST",
@@ -164,7 +170,7 @@ export async function gravar(pedido, dados) {
 }
 
 export async function aplicar(pedido, pagamento) {
-  const status = traduzir(pagamento.status);
+  const status = statusOficialmentePago(pagamento) ? "pago" : traduzir(pagamento?.status);
   const linha = { status, atualizado_em: new Date().toISOString() };
   if (pagamento.id) linha.gateway_id = String(pagamento.id);
   if (pagamento.gateway) linha.gateway = pagamento.gateway;
