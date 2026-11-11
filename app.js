@@ -473,6 +473,13 @@ function linkWhatsApp() {
   return `https://wa.me/${num.length <= 11 ? `55${num}` : num}?text=${encodeURIComponent(texto)}`;
 }
 
+function linkPosVenda() {
+  const num = digits(String(C.whatsapp || ""));
+  if (num.length < 10) return null;
+  const texto = `Olá! Sou ${lead.nomeCompleto}, pedido ${lead.pedido}. Minha adesão da ${P.nome} foi confirmada e preciso falar com o pós-venda.`;
+  return `https://wa.me/${num.length <= 11 ? `55${num}` : num}?text=${encodeURIComponent(texto)}`;
+}
+
 function pixQr(pix) {
   const img = String(pix.qr || "");
   if (/^data:image\//i.test(img)) return `<img class="pix-qr" src="${img}" alt="QR Code do Pix da adesão" width="232" height="232">`;
@@ -562,7 +569,32 @@ async function pixConfirmado(cardEl) {
     <tr><td>Adesão paga</td><td>${brl(entrada)}</td></tr>
     <tr><td>Boletos</td><td>${C.parcelas}x de ${brl(parcela)} · 1º em ${lead.primeiroVencimento}</td></tr>
     <tr><td>Entrega</td><td>${esc(enderecoTxt())}</td></tr></table></div>`);
-  await bot(`Os ${C.parcelas} boletos de ${brl(parcela)} começam em ${lead.primeiroVencimento}. Envio cada um para ${lead.email} antes do vencimento.`, `Qualquer dúvida, é só chamar aqui. Obrigada pela compra, ${lead.primeiro}! 🏍️`);
+  await bot(`Os ${C.parcelas} boletos de ${brl(parcela)} começam em ${lead.primeiroVencimento}. A equipe envia as instruções para ${lead.email} antes do vencimento.`, `Qualquer dúvida, é só chamar aqui. Obrigada pela compra, ${lead.primeiro}!`);
+  await botCard(posVendaCard());
+}
+
+function posVendaCard() {
+  const zap = linkPosVenda();
+  const pagoEm = lead.pagoEm ? new Date(lead.pagoEm) : new Date();
+  const diasPassados = Math.max(0, Math.floor((Date.now() - pagoEm.getTime()) / 86400000));
+  const dia = Math.min(10, diasPassados + 1);
+  const restantes = Math.max(0, 10 - diasPassados);
+  const status = dia <= 2 ? "Pedido em separação" : dia <= 5 ? "Conferência e preparação" : dia <= 8 ? "Despacho e transporte" : "Acompanhamento da entrega";
+  return `<div class="sum pos-venda">
+    <div class="pos-venda-top"><span class="pos-venda-check">✓</span><div><p class="label">Pós-venda HDJ</p><h4>Agora a gente acompanha você</h4></div></div>
+    <p class="pos-venda-lead">Sua adesão foi confirmada. A equipe acompanha o pedido por até <b>10 dias</b>, desde a separação até a chegada da moto.</p>
+    <div class="pos-progress"><div><b>Dia ${dia} de 10</b><span>${restantes ? `Faltam até ${restantes} dias para a previsão de chegada.` : "Estamos na janela final de entrega."}</span></div><i style="width:${dia * 10}%"></i></div>
+    <p class="pos-current"><b>Status atual:</b> ${status}</p>
+    <ol class="pos-timeline">
+      <li class="done"><b>Adesão confirmada</b><span>Pagamento recebido e pedido reservado.</span></li>
+      <li class="${dia >= 2 ? "done" : ""}"><b>Separação da moto</b><span>Conferência do modelo, cor e acessórios.</span></li>
+      <li class="${dia >= 5 ? "done" : ""}"><b>Despacho e transporte</b><span>A equipe atualiza você sobre o envio e a rota.</span></li>
+      <li class="${dia >= 9 ? "done" : ""}"><b>Entrega combinada</b><span>Confirmação da chegada no endereço cadastrado.</span></li>
+    </ol>
+    <div class="pos-venda-info"><b>Guarde estas informações</b><span>Pedido ${esc(lead.pedido)} · Boletos: ${C.parcelas}x de ${brl(parcela)} · 1º vencimento: ${esc(lead.primeiroVencimento)}</span></div>
+    ${zap ? `<a class="btn sm" href="${zap}" target="_blank" rel="noopener">Falar com o pós-venda no WhatsApp</a>` : ""}
+    <p class="mini">Precisa atualizar endereço, telefone ou tirar uma dúvida? Informe sempre o número do pedido.</p>
+  </div>`;
 }
 
 function acompanharPix(cardEl) {
@@ -673,6 +705,7 @@ async function pedidoPago() {
     <tr><td>Boletos</td><td>${C.parcelas}x de ${brl(parcela)} · 1º em ${lead.primeiroVencimento}</td></tr>
     <tr><td>Entrega</td><td>${lead.endereco ? esc(enderecoTxt()) : "—"}</td></tr></table></div>`);
   await bot(`Estamos preparando o envio. Se precisar de algo, é só falar aqui ou chamar no WhatsApp da loja.`);
+  await botCard(posVendaCard());
 }
 
 async function seguirDe(et) {
