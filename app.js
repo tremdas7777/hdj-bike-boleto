@@ -255,8 +255,8 @@ async function cadastro() {
   });
   lead.cpf = maskCpf(lead.cpf);
   Store.save(lead);
-  const anterior = Store.byCpf(lead.cpf);
-  if (anterior && anterior.id !== lead.id && anterior.pedido && ["aguardando_pagamento", "pago"].includes(anterior.etapa)) {
+  const anterior = Store.all().find((item) => item.id !== lead.id && item.cpf === lead.cpf && item.pedido && ["aguardando_pagamento", "pago"].includes(item.etapa));
+  if (anterior) {
     await bot(`Encontrei um pedido anterior com este CPF: ${anterior.pedido}.`);
     const escolha = await choose(["Acompanhar pedido anterior", "Fazer novo pedido"]);
     if (escolha === "Acompanhar pedido anterior") {
