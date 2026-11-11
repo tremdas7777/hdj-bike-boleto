@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     if (!PEDIDO.test(pedido)) return res.status(400).json({ ok: false, erro: "pedido" });
     let linha = null;
     try {
-      [linha] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=pedido,gateway_id,status,criado_em`);
+      [linha] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=pedido,gateway,gateway_id,status,criado_em`);
     } catch {
       return res.status(200).json({ ok: true, status: null });
     }
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     if (linha.status === "pendente" && linha.gateway_id) {
       const velho = Date.now() - new Date(linha.criado_em).getTime() > 36 * 3600_000;
       if (velho) return res.status(200).json({ ok: true, status: "cancelado" });
-      const pagamento = await consultar(linha.gateway_id);
+      const pagamento = await consultar(linha.gateway_id, linha.gateway || "ironpay");
       if (pagamento) {
         const status = await aplicar(pedido, pagamento).catch(() => linha.status);
         return res.status(200).json({ ok: true, status });
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
 
   // Reaproveita uma cobrança pendente e ainda válida para o mesmo pedido.
   try {
-    const [existente] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=pedido,status,copiaecola,qr,expira_em,valor`);
+    const [existente] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=pedido,gateway,status,copiaecola,qr,expira_em,valor`);
     const expira = existente?.expira_em ? new Date(existente.expira_em) : null;
     const vale = expira ? expira > new Date() : true; // a IronPay usa 24h por padrão
     if (existente && existente.status === "pendente" && existente.copiaecola && vale) {
@@ -68,6 +68,7 @@ export default async function handler(req, res) {
       base: base(req),
     });
     await gravar(pedido, {
+      gateway: cobranca.gateway,
       lead_id: UUID.test(b.lead_id || "") ? b.lead_id : null,
       valor,
       gateway_id: cobranca.id,

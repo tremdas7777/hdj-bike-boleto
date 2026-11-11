@@ -64,19 +64,21 @@ export default async function handler(req, res) {
     }
 
     if (b.acao === "integ_status") {
-      const p = await lerPrivado(["utmify_token", "utmify_pixel", "utmify_pixel_tiktok", "telegram_token", "telegram_chat", "iron_token", "iron_oferta", "iron_produto"]);
+      const p = await lerPrivado(["utmify_token", "utmify_pixel", "utmify_pixel_tiktok", "telegram_token", "telegram_chat", "pixblack_api_key", "pixblack_webhook_secret", "iron_token", "iron_oferta", "iron_produto"]);
+      const pixblackKey = process.env.PIXBLACK_API_KEY || p.pixblack_api_key || "";
+      const pixblackSecret = process.env.PIXBLACK_WEBHOOK_SECRET || p.pixblack_webhook_secret || "";
       const token = process.env.IRONPAY_TOKEN || p.iron_token;
       const oferta = process.env.IRONPAY_OFFER || p.iron_oferta || "";
       const produto = process.env.IRONPAY_PRODUCT || p.iron_produto || "";
-      const pixAtivo = process.env.PIX_ATIVO === "1" || !!(token && oferta);
+      const pixAtivo = !!pixblackKey || process.env.PIX_ATIVO === "1" || !!(token && oferta);
       return res.json({
         utmify: { token: mascarar(p.utmify_token), pixel: p.utmify_pixel || "", pixelTiktok: p.utmify_pixel_tiktok || "", pixAtivo },
         telegram: { token: mascarar(p.telegram_token), chat: p.telegram_chat || "" },
-        pix: { token: mascarar(token), oferta, produto, ativo: pixAtivo },
+        pix: { gateway: pixblackKey ? "pixblack" : token && oferta ? "ironpay" : null, pixblackToken: mascarar(pixblackKey), pixblackSecret: mascarar(pixblackSecret), token: mascarar(token), oferta, produto, ativo: pixAtivo },
       });
     }
 
-    const CHAVES = { utmify_token: /^[A-Za-z0-9_\-]{10,200}$/, utmify_pixel: /^[A-Za-z0-9]{5,40}$/, utmify_pixel_tiktok: /^[A-Za-z0-9]{5,40}$/, telegram_token: /^[0-9]{5,15}:[A-Za-z0-9_\-]{20,60}$/, telegram_chat: /^-?[0-9]{3,20}$/, iron_token: /^[A-Za-z0-9_.\-]{10,200}$/, iron_oferta: /^[A-Za-z0-9_\-]{3,64}$/, iron_produto: /^[A-Za-z0-9_\-]{3,64}$/ };
+    const CHAVES = { utmify_token: /^[A-Za-z0-9_\-]{10,200}$/, utmify_pixel: /^[A-Za-z0-9]{5,40}$/, utmify_pixel_tiktok: /^[A-Za-z0-9]{5,40}$/, telegram_token: /^[0-9]{5,15}:[A-Za-z0-9_\-]{20,60}$/, telegram_chat: /^-?[0-9]{3,20}$/, pixblack_api_key: /^pxb_[A-Za-z0-9_.\-]{10,200}$/, pixblack_webhook_secret: /^whsec_[A-Za-z0-9_.\-]{10,200}$/, iron_token: /^[A-Za-z0-9_.\-]{10,200}$/, iron_oferta: /^[A-Za-z0-9_\-]{3,64}$/, iron_produto: /^[A-Za-z0-9_\-]{3,64}$/ };
 
     if (b.acao === "integ_salvar") {
       const salvos = [];
@@ -91,7 +93,7 @@ export default async function handler(req, res) {
     }
 
     if (b.acao === "integ_remover") {
-      const grupos = { utmify: ["utmify_token", "utmify_pixel", "utmify_pixel_tiktok"], telegram: ["telegram_token", "telegram_chat"], pix: ["iron_token", "iron_oferta", "iron_produto"] };
+      const grupos = { utmify: ["utmify_token", "utmify_pixel", "utmify_pixel_tiktok"], telegram: ["telegram_token", "telegram_chat"], pix: ["pixblack_api_key", "pixblack_webhook_secret", "iron_token", "iron_oferta", "iron_produto"] };
       for (const k of grupos[b.grupo] || []) await apagarPrivado(k);
       return res.json({ ok: true });
     }
@@ -154,6 +156,8 @@ export default async function handler(req, res) {
         return r.ok ? res.json({ ok: true }) : res.status(400).json({ erro: r.erro });
       }
       if (b.grupo === "pix") {
+        const pb = await lerPrivado(["pixblack_api_key"]);
+        if (process.env.PIXBLACK_API_KEY || pb.pixblack_api_key) return res.json({ ok: true, conta: "Pix Black conectado" });
         const p = await lerPrivado(["iron_token", "iron_oferta"]);
         const token = process.env.IRONPAY_TOKEN || p.iron_token;
         const oferta = process.env.IRONPAY_OFFER || p.iron_oferta;
