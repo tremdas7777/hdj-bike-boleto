@@ -83,7 +83,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 
 (function pixels() {
   const px = C.pixels || {};
-  const carregar = (src, global, id) => { window[global] = id; const s = document.createElement("script"); s.src = src; s.async = true; s.defer = true; document.head.appendChild(s); };
+  const carregar = (src, global, id) => { if (window[global]) return; window[global] = id; const s = document.createElement("script"); s.src = src; s.async = true; s.defer = true; document.head.appendChild(s); };
   if (px.meta) carregar("https://cdn.utmify.com.br/scripts/pixel/pixel.js", "pixelId", px.meta);
   if (px.tiktok) carregar("https://cdn.utmify.com.br/scripts/pixel/pixel-tiktok.js", "tikTokPixelId", px.tiktok);
 })();
