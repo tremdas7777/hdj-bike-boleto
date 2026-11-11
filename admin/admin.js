@@ -211,15 +211,18 @@ function renderInicio() {
 function hostDe(url) { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } }
 function origemDe(o) {
   o = o || {};
-  if (o.utm_source) return { fonte: o.utm_source, campanha: o.utm_campaign || "", criativo: o.utm_content || "" };
+  const raw = String(o.utm_source || o.src || "").toLowerCase();
   const h = hostDe(o.referrer);
-  if (!h || h.includes("vercel.app") || h === location.hostname) return { fonte: "Direto", campanha: "", criativo: "" };
-  if (/google\./.test(h)) return { fonte: "Google orgânico", campanha: "", criativo: "" };
-  if (/facebook|instagram|fb\.|l\.instagram/.test(h)) return { fonte: "Meta sem UTM", campanha: "", criativo: "" };
-  if (/tiktok/.test(h)) return { fonte: "TikTok sem UTM", campanha: "", criativo: "" };
-  return { fonte: h, campanha: "", criativo: "" };
+  const plataforma = /chatgpt|chat\.openai|openai/.test(raw) || /chatgpt|chat\.openai|openai/.test(h) ? "ChatGPT" : /facebook|meta|fb/.test(raw) || /facebook|fb\./.test(h) ? "Facebook" : /instagram|ig/.test(raw) || /instagram|l\.instagram/.test(h) ? "Instagram" : /google|gads/.test(raw) || /google\./.test(h) ? "Google" : /tiktok/.test(raw) || /tiktok/.test(h) ? "TikTok" : raw || "";
+  if (o.utm_source || o.src) return { fonte: plataforma || o.utm_source || o.src, plataforma: plataforma || o.utm_source || o.src, campanha: o.utm_campaign || "", criativo: o.utm_content || "", meio: o.utm_medium || "", termo: o.utm_term || "", src: o.src || "", sck: o.sck || "", referrer: o.referrer || "", landing: o.landing || "" };
+  if (!h || h.includes("vercel.app") || h === location.hostname) return { fonte: "Direto", plataforma: "Direto", campanha: "", criativo: "", meio: "", termo: "", src: "", sck: "", referrer: o.referrer || "", landing: o.landing || "" };
+  if (/google\./.test(h)) return { fonte: "Google orgânico", plataforma: "Google", campanha: "", criativo: "", meio: "organic", termo: "", src: "", sck: "", referrer: o.referrer || "", landing: o.landing || "" };
+  if (/facebook|fb\./.test(h)) return { fonte: "Facebook orgânico", plataforma: "Facebook", campanha: "", criativo: "", meio: "organic", termo: "", src: "", sck: "", referrer: o.referrer || "", landing: o.landing || "" };
+  if (/instagram|l\.instagram/.test(h)) return { fonte: "Instagram orgânico", plataforma: "Instagram", campanha: "", criativo: "", meio: "organic", termo: "", src: "", sck: "", referrer: o.referrer || "", landing: o.landing || "" };
+  if (/tiktok/.test(h)) return { fonte: "TikTok orgânico", plataforma: "TikTok", campanha: "", criativo: "", meio: "organic", termo: "", src: "", sck: "", referrer: o.referrer || "", landing: o.landing || "" };
+  return { fonte: h, plataforma: h, campanha: "", criativo: "", meio: "referral", termo: "", src: "", sck: "", referrer: o.referrer || "", landing: o.landing || "" };
 }
-const origemLead = (c) => origemDe({ ...((c.dados || {}).origem || {}), utm_source: c.utm_source || ((c.dados || {}).origem || {}).utm_source, utm_campaign: c.utm_campaign || ((c.dados || {}).origem || {}).utm_campaign, utm_content: c.utm_content || ((c.dados || {}).origem || {}).utm_content });
+const origemLead = (c) => origemDe({ ...((c.dados || {}).origem || {}), utm_source: c.utm_source || ((c.dados || {}).origem || {}).utm_source, utm_medium: ((c.dados || {}).origem || {}).utm_medium, utm_campaign: c.utm_campaign || ((c.dados || {}).origem || {}).utm_campaign, utm_content: c.utm_content || ((c.dados || {}).origem || {}).utm_content, utm_term: ((c.dados || {}).origem || {}).utm_term });
 const rotuloOrigem = (o) => [o.fonte, o.campanha].filter(Boolean).join(" · ");
 
 function vazio(t, s) { return `<div class="vazio"><b>${esc(t)}</b>${esc(s)}</div>`; }
@@ -275,9 +278,9 @@ function pintarLista() {
   const el = $("#lista");
   if (!l.length) { el.innerHTML = vazio(st.clientes.length ? "Ninguém com esse filtro" : "Ainda não há clientes", st.clientes.length ? "Tente outro filtro ou limpe a busca." : "Quando alguém abrir o chat do site, aparece aqui."); return; }
   el.innerHTML = `
-    <div class="table-wrap"><table class="t"><thead><tr><th>Cliente</th><th>Telefone</th><th>Entrada · parcela</th><th>Etapa</th><th>Status</th><th>Atualizado</th></tr></thead><tbody>
+    <div class="table-wrap"><table class="t"><thead><tr><th>Cliente</th><th>Origem</th><th>Telefone</th><th>Entrada · parcela</th><th>Etapa</th><th>Status</th><th>Atualizado</th></tr></thead><tbody>
     ${l.map((c) => `<tr data-id="${c.id}"><td class="who"><b>${esc(c.nome || c.primeiro_nome || "Sem nome")}</b><span>${esc([c.cidade, c.uf].filter(Boolean).join("/") || c.email || "")}</span></td>
-      <td class="num">${esc(c.telefone || "—")}</td>
+      <td class="who"><b>${esc(origemLead(c).fonte)}</b><span>${esc([origemLead(c).campanha, origemLead(c).meio].filter(Boolean).join(" · ") || "sem UTM")}</span></td><td class="num">${esc(c.telefone || "—")}</td>
       <td class="num">${c.entrada ? `${brl(c.entrada)}<div class="sub">${PADRAO.parcelas}× ${brl(c.parcela)}</div>` : "—"}</td>
       <td>${pill(NOME_ETAPA[c.etapa] || c.etapa, tomEtapa(c.etapa))}</td>
       <td>${pill(NOME_STATUS[c.status_admin || "novo"], TOM_STATUS[c.status_admin || "novo"])}</td>
@@ -382,7 +385,7 @@ function abrirCliente(id) {
       <dt>Parcelas</dt><dd class="num">${c.parcela ? `${PADRAO.parcelas}× ${brl(c.parcela)}` : "—"}</dd>
       <dt>Vencimento</dt><dd>${c.dia_vencimento ? `Dia ${c.dia_vencimento}${d.primeiroVencimento ? ` · 1º boleto ${esc(d.primeiroVencimento)}` : ""}` : "—"}</dd>
       <dt>Endereço</dt><dd>${end.rua ? `${esc(end.rua)}, ${esc(end.numero)}${end.complemento ? ` · ${esc(end.complemento)}` : ""}<br>${esc(end.bairro)} · ${esc(end.cidade)}/${esc(end.uf)} · ${esc(end.cep)}` : "—"}</dd>
-      <dt>Origem</dt><dd>${(() => { const o = origemLead(c); const og = d.origem || {}; return `${esc(o.fonte)}${o.campanha ? `<br><span class="sub">Campanha: ${esc(o.campanha)}</span>` : ""}${o.criativo ? `<br><span class="sub">Criativo: ${esc(o.criativo)}</span>` : ""}${og.utm_medium ? `<br><span class="sub">Meio: ${esc(og.utm_medium)}</span>` : ""}${og.utm_term ? `<br><span class="sub">Termo: ${esc(og.utm_term)}</span>` : ""}`; })()}</dd>
+      <dt>Origem</dt><dd>${(() => { const o = origemLead(c); return `<b>${esc(o.fonte)}</b>${o.campanha ? `<br><span class="sub">utm_campaign: ${esc(o.campanha)}</span>` : ""}${o.meio ? `<br><span class="sub">utm_medium: ${esc(o.meio)}</span>` : ""}${o.criativo ? `<br><span class="sub">utm_content: ${esc(o.criativo)}</span>` : ""}${o.termo ? `<br><span class="sub">utm_term: ${esc(o.termo)}</span>` : ""}${o.src ? `<br><span class="sub">src: ${esc(o.src)}</span>` : ""}${o.sck ? `<br><span class="sub">sck: ${esc(o.sck)}</span>` : ""}${o.referrer ? `<br><span class="sub">Referência: ${esc(o.referrer)}</span>` : ""}${o.landing ? `<br><span class="sub">Landing: ${esc(o.landing)}</span>` : ""}`; })()}</dd>
       <dt>Contrato</dt><dd>${d.aceiteContrato ? `Aceito em ${new Date(d.aceiteContrato.em).toLocaleString("pt-BR")} (${esc(d.aceiteContrato.versao)})` : "Não aceito"}</dd>
     </dl></div>
     <div class="sec"><h4>Acompanhamento</h4>
@@ -418,8 +421,8 @@ addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#drawer").hid
 
 function exportarCsv() {
   const cel = (v) => { let s = String(v ?? ""); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return `"${s.replace(/"/g, '""')}"`; };
-  const cab = ["Criado em", "Nome", "CPF", "Telefone", "E-mail", "Cidade", "UF", "Entrada", "Parcela", "Vencimento", "Etapa", "Status", "Pedido", "Anotações"];
-  const linhas = filtrados().map((c) => [new Date(c.criado_em).toLocaleString("pt-BR"), c.nome || c.primeiro_nome, c.cpf, c.telefone, c.email, c.cidade, c.uf, c.entrada, c.parcela, c.dia_vencimento, NOME_ETAPA[c.etapa] || c.etapa, NOME_STATUS[c.status_admin || "novo"], c.pedido, c.notas]);
+  const cab = ["Criado em", "Nome", "CPF", "Telefone", "E-mail", "Cidade", "UF", "Origem", "UTM medium", "UTM campaign", "UTM content", "UTM term", "src", "sck", "Referência", "Landing", "Entrada", "Parcela", "Vencimento", "Etapa", "Status", "Pedido", "Anotações"];
+  const linhas = filtrados().map((c) => { const o = origemLead(c); return [new Date(c.criado_em).toLocaleString("pt-BR"), c.nome || c.primeiro_nome, c.cpf, c.telefone, c.email, c.cidade, c.uf, o.fonte, o.meio, o.campanha, o.criativo, o.termo, o.src, o.sck, o.referrer, o.landing, c.entrada, c.parcela, c.dia_vencimento, NOME_ETAPA[c.etapa] || c.etapa, NOME_STATUS[c.status_admin || "novo"], c.pedido, c.notas]; });
   const csv = "﻿" + [cab, ...linhas].map((l) => l.map(cel).join(";")).join("\r\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));

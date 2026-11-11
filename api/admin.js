@@ -59,7 +59,7 @@ export default async function handler(req, res) {
       const agora = Date.now();
       const ini = new Date(); ini.setHours(0, 0, 0, 0);
       const desde = new Date(Math.min(ini.getTime(), agora - 30 * 60000)).toISOString();
-      const sessoes = await db(`hdj_sessoes?criado_em=gte.${encodeURIComponent(desde)}&order=visto_em.desc&limit=2000&select=sessao,criado_em,visto_em,path,referrer,device,utm_source,utm_medium,utm_campaign,utm_content,src,chat,lead_id`);
+      const sessoes = await db(`hdj_sessoes?criado_em=gte.${encodeURIComponent(desde)}&order=visto_em.desc&limit=2000&select=sessao,criado_em,visto_em,path,referrer,device,utm_source,utm_medium,utm_campaign,utm_content,utm_term,src,sck,chat,lead_id`);
       return res.json({ sessoes, agora: new Date(agora).toISOString(), inicioDia: ini.toISOString() });
     }
 
