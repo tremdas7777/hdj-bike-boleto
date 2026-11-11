@@ -760,6 +760,7 @@ async function run() {
   }
   pintarPassos();
   if (retomavel(lead) && lead.historico.length) {
+    const retomadaPagamento = lead.etapa === "aguardando_pagamento";
     for (const h of lead.historico) h.html ? card(h.html, true) : bubble(h.texto, h.quem === "cliente" ? "me" : "bot", true);
     await bot(`Que bom te ver de novo, ${lead.primeiro}! Quer continuar de onde parou?`);
     const r = await choose(["Continuar de onde parei", "Começar de novo"]);
@@ -773,6 +774,13 @@ async function run() {
       return seguirDe("iniciado");
     }
     track("retomou", { etapa: lead.etapa });
+    if (retomadaPagamento) {
+      // Não repete mensagens antigas de atendimento manual: ao retomar no pagamento,
+      // sempre tenta gerar/mostrar novamente o Pix da adesão.
+      msgs.innerHTML = "";
+      foot.innerHTML = "";
+      return pagamento();
+    }
     return seguirDe(lead.etapa);
   }
   return seguirDe("iniciado");
