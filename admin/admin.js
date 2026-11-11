@@ -482,8 +482,8 @@ async function renderAjustes() {
     </section>
     <section class="panel" id="int-pix" style="margin-top:14px"><div class="panel-h"><div><h3>Pagamento no Pix</h3><p>Pix Black é o gateway principal. A IronPay fica disponível apenas para cobranças antigas.</p></div><span id="p-pill"></span></div>
       <div class="panel-b"><div class="cfg">
+        <div class="form-row full"><label for="p-gateway">Gateway usado para novas cobranças</label><select id="p-gateway"><option value="pixblack">Pix Black</option><option value="ironpay">IronPay</option></select><small>As credenciais ficam separadas. A escolha aqui define qual gateway será usado nos novos pedidos.</small></div>
         <div class="form-row full"><label for="p-pb-token">Chave de API Pix Black</label><input id="p-pb-token" autocomplete="off" placeholder="pxb_live_..."><small id="p-pb-token-atual">Pix Black › Integrações › Gerar chave de API. A chave fica somente no servidor.</small></div>
-        <div class="form-row full"><label for="p-pb-secret">Segredo do webhook Pix Black</label><input id="p-pb-secret" autocomplete="off" placeholder="whsec_..."><small id="p-pb-secret-atual">Cadastre no Pix Black o webhook: https://seu-dominio/api/webhook</small></div>
         <div class="form-row full"><label for="p-token">Token de API da IronPay</label><input id="p-token" autocomplete="off" placeholder="Cole o token da conta"><small id="p-token-atual">IronPay › Configurações › API › Token de acesso.</small></div>
         <div class="form-row"><label for="p-oferta">Hash da oferta</label><input id="p-oferta" autocomplete="off" placeholder="Ex.: 7becb"><small>A oferta da moto no painel da IronPay. Sem ela o Pix não é gerado.</small></div>
         <div class="form-row"><label for="p-produto">Hash do produto</label><input id="p-produto" autocomplete="off" placeholder="Opcional"><small>Se ficar vazio, uso o mesmo hash da oferta.</small></div>
@@ -552,13 +552,13 @@ async function ligarIntegracoes() {
     const pixBlackToken = !!(s.pix && s.pix.pixblackToken);
     const pixToken = !!(s.pix && s.pix.token);
     const pixOferta = !!(s.pix && s.pix.oferta);
+    $("#p-gateway").value = s.pix?.gateway || (pixBlackToken ? "pixblack" : "ironpay");
     $("#p-pill").innerHTML = pixBlackToken ? pill("Pix Black conectado", "ok") : pixToken && pixOferta ? pill("IronPay conectado", "ok") : pixToken ? pill("Falta a oferta", "warn") : pill("Não configurado", "");
     $("#p-pb-token-atual").textContent = pixBlackToken ? `Chave salva: ${s.pix.pixblackToken}. Cole outra para trocar.` : "Pix Black › Integrações › Gerar chave de API.";
-    $("#p-pb-secret-atual").textContent = s.pix?.pixblackSecret ? `Segredo salvo: ${s.pix.pixblackSecret}.` : "Cadastre o webhook e copie o segredo whsec_...";
     $("#p-oferta").value = (s.pix && s.pix.oferta) || "";
     $("#p-produto").value = (s.pix && s.pix.produto) || "";
     $("#p-token-atual").textContent = pixToken ? `Token salvo: ${s.pix.token}. Cole outro para trocar.` : "IronPay › Configurações › API › Token de acesso.";
-    $("#p-aviso").textContent = pixBlackToken
+    $("#p-aviso").textContent = $("#p-gateway").value === "pixblack"
       ? "Pix Black ligado: novas cobranças usam QR Code com expiração de 30 minutos e confirmação por webhook."
       : !pixToken
       ? "Sem token, o pedido é registrado e a equipe envia o Pix pelo WhatsApp."
@@ -582,8 +582,8 @@ async function ligarIntegracoes() {
     pintar();
   });
   acao("#p-salvar", async () => {
-    await api("integ_salvar", { pixblack_api_key: $("#p-pb-token").value, pixblack_webhook_secret: $("#p-pb-secret").value, iron_token: $("#p-token").value, iron_oferta: $("#p-oferta").value, iron_produto: $("#p-produto").value });
-    $("#p-pb-token").value = ""; $("#p-pb-secret").value = ""; $("#p-token").value = ""; toast("Gateway Pix salvo"); pintar();
+    await api("integ_salvar", { pix_gateway: $("#p-gateway").value, pixblack_api_key: $("#p-pb-token").value, iron_token: $("#p-token").value, iron_oferta: $("#p-oferta").value, iron_produto: $("#p-produto").value });
+    $("#p-pb-token").value = ""; $("#p-token").value = ""; toast("Gateway Pix salvo"); pintar();
   });
   acao("#p-teste", async () => { const r = await api("integ_teste", { grupo: "pix" }); toast(r.aviso || `IronPay: ${r.conta || "ok"}`); });
   acao("#p-remover", async () => { await api("integ_remover", { grupo: "pix" }); toast("IronPay removida"); pintar(); });

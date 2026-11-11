@@ -12,8 +12,9 @@ const PRODUTO_PADRAO = "3oolsookfk";
 const OFERTA_PADRAO = "yp7kympp3s";
 
 export async function credenciais() {
-  const p = await lerPrivado(["pixblack_api_key", "pixblack_webhook_secret", "iron_token", "iron_oferta", "iron_produto"]).catch(() => ({}));
+  const p = await lerPrivado(["pix_gateway", "pixblack_api_key", "pixblack_webhook_secret", "iron_token", "iron_oferta", "iron_produto"]).catch(() => ({}));
   return {
+    gateway: process.env.PIX_GATEWAY || p.pix_gateway || null,
     pixblackKey: process.env.PIXBLACK_API_KEY || p.pixblack_api_key || null,
     pixblackSecret: process.env.PIXBLACK_WEBHOOK_SECRET || p.pixblack_webhook_secret || null,
     iron: {
@@ -26,6 +27,8 @@ export async function credenciais() {
 
 export async function gatewayAtivo() {
   const c = await credenciais();
+  if (c.gateway === "pixblack") return c.pixblackKey ? "pixblack" : null;
+  if (c.gateway === "ironpay") return c.iron.token && c.iron.oferta ? "ironpay" : null;
   return c.pixblackKey ? "pixblack" : c.iron.token && c.iron.oferta ? "ironpay" : null;
 }
 
@@ -121,7 +124,7 @@ export async function criarCobranca(dados) {
   const c = await credenciais();
   const centavos = Math.round(Number(dados.valor) * 100);
   if (!(centavos >= 500 && centavos <= 100000000)) throw new Error("valor_invalido");
-  return c.pixblackKey ? criarPixBlack(dados) : criarIronPay(dados);
+  return (await gatewayAtivo()) === "pixblack" ? criarPixBlack(dados) : criarIronPay(dados);
 }
 
 export async function consultar(id, gateway = "ironpay") {

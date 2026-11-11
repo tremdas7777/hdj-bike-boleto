@@ -66,7 +66,7 @@ export default async function handler(req, res) {
 
   if (novos.length) {
     let cfg = {};
-    try { cfg = await lerPrivado(["telegram_token", "telegram_chat", "utmify_token", "pixblack_api_key", "iron_token", "iron_oferta"]); } catch {}
+    try { cfg = await lerPrivado(["telegram_token", "telegram_chat", "utmify_token", "pix_gateway", "pixblack_api_key", "iron_token", "iron_oferta"]); } catch {}
     const origemTxt = [utm.utm_source, utm.utm_campaign].filter(Boolean).join(" / ") || "direto";
     for (const tipo of novos) {
       const titulo = tipo === "pix" ? "💰 Cliente chegou ao Pix" : "🆕 Novo cadastro";
@@ -78,7 +78,12 @@ export default async function handler(req, res) {
         `Origem: ${origemTxt}`,
       ].filter(Boolean).join("\n");
       if (cfg.telegram_token && cfg.telegram_chat) await enviarTelegram(cfg.telegram_token, cfg.telegram_chat, msg);
-      const pixLigado = !!cfg.pixblack_api_key || !!process.env.PIXBLACK_API_KEY || !!(cfg.iron_token && cfg.iron_oferta) || (!!process.env.IRONPAY_TOKEN && !!process.env.IRONPAY_OFFER);
+      const gateway = process.env.PIX_GATEWAY || cfg.pix_gateway || null;
+      const pixLigado = gateway === "pixblack"
+        ? !!cfg.pixblack_api_key || !!process.env.PIXBLACK_API_KEY
+        : gateway === "ironpay"
+          ? !!(cfg.iron_token && cfg.iron_oferta) || (!!process.env.IRONPAY_TOKEN && !!process.env.IRONPAY_OFFER)
+          : !!cfg.pixblack_api_key || !!process.env.PIXBLACK_API_KEY || !!(cfg.iron_token && cfg.iron_oferta) || (!!process.env.IRONPAY_TOKEN && !!process.env.IRONPAY_OFFER);
       if (tipo === "pix" && (process.env.PIX_ATIVO === "1" || pixLigado) && cfg.utmify_token && linha.entrada) {
         const r = await enviarUtmify(cfg.utmify_token, {
           orderId: linha.pedido || linha.id, status: "waiting_payment", createdAt: Date.now(),
