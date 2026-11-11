@@ -135,14 +135,14 @@ export async function consultar(id, gateway = "ironpay") {
     const r = await fetch(`${PIXBLACK_BASE}/charges/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${c.pixblackKey}`, Accept: "application/json" } });
     if (!r.ok) return null;
     const j = await r.json().catch(() => null);
-    return j ? { id: String(j.id || id), gateway: "pixblack", status: j.status || "pending", amountCents: j.amount_cents } : null;
+    return j ? { id: String(j.id || id), gateway: "pixblack", status: j.status || "pending", amountCents: j.amount_cents, paidAt: j.paid_at || null, externalReference: j.external_reference || null } : null;
   }
   if (!c.iron.token) return null;
   const r = await fetch(`${IRONPAY_BASE}/transactions/${encodeURIComponent(id)}?api_token=${encodeURIComponent(c.iron.token)}`, { headers: { Accept: "application/json" } });
   if (!r.ok) return null;
   const j = await r.json().catch(() => null);
   const d = j?.data || j;
-  return d ? { id: String(d.hash || id), gateway: "ironpay", status: d.status || d.payment_status || "pending" } : null;
+  return d ? { id: String(d.hash || id), gateway: "ironpay", status: d.status || d.payment_status || "pending", amountCents: d.amount_cents ?? d.amount ?? null, paidAt: d.paid_at || d.approved_at || d.payment_date || null } : null;
 }
 
 export function traduzir(status) {
@@ -157,6 +157,7 @@ export function traduzir(status) {
 
 function statusOficialmentePago(pagamento) {
   const status = String(pagamento?.status || "").toLowerCase();
+  if (!pagamento?.paidAt) return false;
   if (pagamento?.gateway === "pixblack") return status === "paid";
   return status === "paid" || status === "approved" || status === "completed";
 }
@@ -170,14 +171,18 @@ export async function gravar(pedido, dados) {
 }
 
 export async function aplicar(pedido, pagamento) {
-  const status = statusOficialmentePago(pagamento) ? "pago" : traduzir(pagamento?.status);
+  const [cobrancaAtual] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=lead_id,valor,avisado,gateway_id`).catch(() => [null]);
+  const esperado = cobrancaAtual && Number.isFinite(Number(cobrancaAtual.valor)) ? Math.round(Number(cobrancaAtual.valor) * 100) : null;
+  const valorConfere = !!cobrancaAtual && esperado != null && pagamento?.amountCents != null && Number(pagamento.amountCents) === esperado;
+  const referenciaConfere = pagamento?.gateway !== "pixblack" ? true : pagamento.externalReference === pedido;
+  const status = statusOficialmentePago(pagamento) && valorConfere && referenciaConfere ? "pago" : traduzir(pagamento?.status);
   const linha = { status, atualizado_em: new Date().toISOString() };
   if (pagamento.id) linha.gateway_id = String(pagamento.id);
   if (pagamento.gateway) linha.gateway = pagamento.gateway;
   if (status === "pago") linha.pago_em = new Date().toISOString();
   await gravar(pedido, linha);
   if (status !== "pago") return status;
-  const [cobranca] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=lead_id,valor,avisado`).catch(() => [null]);
+  const cobranca = cobrancaAtual;
   if (!cobranca || cobranca.avisado) return status;
   if (uuid.test(cobranca.lead_id || "")) await db(`hdj_leads?id=eq.${cobranca.lead_id}`, { method: "PATCH", body: { etapa: "pago", atualizado_em: new Date().toISOString() }, prefer: "return=minimal" }).catch(() => {});
   const cfg = await lerPrivado(["utmify_token"]).catch(() => ({}));

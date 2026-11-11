@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     if (!PEDIDO.test(pedido)) return res.status(400).json({ ok: false, erro: "pedido" });
     let linha = null;
     try {
-      [linha] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=pedido,gateway,gateway_id,status,criado_em`);
+      [linha] = await db(`hdj_pagamentos?pedido=eq.${encodeURIComponent(pedido)}&select=pedido,gateway,gateway_id,status,criado_em,valor`);
     } catch {
       return res.status(200).json({ ok: true, status: null });
     }
