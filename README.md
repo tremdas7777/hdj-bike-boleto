@@ -5,6 +5,8 @@ O gateway principal agora é a Pix Black. No painel `/admin`, em **Integrações
 
 O site confirma o pagamento por consulta automática à Pix Black, portanto não é necessário cadastrar webhook nem segredo para operar. O endpoint `/api/webhook` permanece disponível como integração opcional. O Pix Black expira em 30 minutos; QR Code e copia e cola são exibidos dentro do chat.
 
+O mesmo CPF pode acessar o fluxo várias vezes. Se já houver um pedido pendente, o cliente pode retomar e ver o Pix novamente; se o pedido estiver confirmado pela API do gateway, o chat abre diretamente o acompanhamento pós-venda.
+
 Também é possível usar as variáveis de ambiente `PIXBLACK_API_KEY` e `PIXBLACK_WEBHOOK_SECRET` na Vercel. Elas têm prioridade sobre os valores salvos no painel. A IronPay continua no código apenas para consultar ou concluir cobranças antigas e como fallback enquanto a Pix Black não estiver configurada.
 
 ## Configuração automática da IronPay

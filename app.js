@@ -236,6 +236,7 @@ function condicoesHtml(extra = "") {
 }
 
 async function cadastro() {
+  let pedidoRetomado = false;
   if (!lead.nomeCompleto) {
     await bot("Vou pedir uma informação de cada vez. Qual é o seu nome completo?");
     lead.nomeCompleto = await ask("Nome completo", { validate: (v) => v.split(" ").filter(Boolean).length >= 2 || "Digite nome e sobrenome.", autocomplete: "name" });
@@ -247,8 +248,6 @@ async function cadastro() {
     mask: maskCpf, inputmode: "numeric",
     validate: (v) => {
       if (!cpfValido(v)) return "CPF inválido. Confira os números.";
-      const dup = Store.byCpf(maskCpf(v));
-      if (dup && dup.id !== lead.id && dup.etapa !== "iniciado") return "Já existe um pedido com esse CPF. Fale com nossa equipe para continuar o pedido anterior.";
       return true;
     },
     show: (v) => cpfOculto(maskCpf(v)),
@@ -256,6 +255,26 @@ async function cadastro() {
   });
   lead.cpf = maskCpf(lead.cpf);
   Store.save(lead);
+  const anterior = Store.byCpf(lead.cpf);
+  if (anterior && anterior.id !== lead.id && anterior.pedido && ["aguardando_pagamento", "pago"].includes(anterior.etapa)) {
+    await bot(`Encontrei um pedido anterior com este CPF: ${anterior.pedido}.`);
+    const escolha = await choose(["Acompanhar pedido anterior", "Fazer novo pedido"]);
+    if (escolha === "Acompanhar pedido anterior") {
+      lead = anterior;
+      gravarAtual(lead.id);
+      msgs.innerHTML = "";
+      if (lead.etapa === "pago" && await pagamentoAindaConfirmado()) {
+        await pedidoPago();
+      } else {
+        lead.etapa = "aguardando_pagamento";
+        delete lead.pagoEm;
+        Store.save(lead);
+        await pagamento();
+      }
+      pedidoRetomado = true;
+    }
+  }
+  if (pedidoRetomado) return "acompanhado";
   }
   if (!lead.email) {
     await bot("Seu e-mail? Vamos mandar a cópia do contrato para ele.");
@@ -687,7 +706,7 @@ async function condicoes() {
 const PASSOS = [
   ["iniciado", inicio],
   ["produto_apresentado", condicoes],
-  ["condicoes_aceitas", async () => { await cadastro(); await confirmarCadastro(); }],
+  ["condicoes_aceitas", async () => { if ((await cadastro()) === "acompanhado") return false; await confirmarCadastro(); }],
   ["cadastro_confirmado", vencimento],
   ["vencimento_escolhido", resumoFinanceiro],
   ["proposta_aceita", contrato],
