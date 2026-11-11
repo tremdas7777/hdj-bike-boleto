@@ -79,6 +79,8 @@ h1 .hl{color:var(--accent)}
 .offer-tail{font-size:clamp(16px,1.6vw,22px);font-stretch:112%;color:rgba(255,255,255,.75);letter-spacing:.02em}
 .hero-sub b{color:#fff;font-weight:600}
 .hero-sub{grid-area:sub;max-width:46ch;font-size:18px;color:rgba(255,255,255,.82)}
+.hero-clarity{display:block;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.24);font:500 12px/1.55 var(--mono);letter-spacing:.01em;color:rgba(255,255,255,.68)}
+.hero-clarity b{color:var(--accent);font-weight:700}
 .hero-buy{grid-area:buy;display:flex;align-items:center;gap:26px;flex-wrap:wrap;padding-top:8px}
 .hero-price{font:400 14px/1.45 var(--mono);color:rgba(255,255,255,.75);font-variant-numeric:tabular-nums}
 .hero-price b{color:#fff;font-weight:600}
